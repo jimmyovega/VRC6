@@ -1,0 +1,78 @@
+// Use DBML to define your database structure
+// Docs: https://dbml.dbdiagram.io/docs
+
+Table audits {
+  user_id integer
+  article_id integer
+  artitle_title varchar
+  article_published timestamp
+  created_at timestamp
+}
+
+Table users {
+  id integer [primary key, not null]
+  username varchar(30) [unique]
+  role varchar
+  created_at timestamp
+  email varchar [unique]
+  password varchar(30)
+  salt varchar
+}
+
+Table articles {
+  id integer [primary key, not null]
+  title varchar(70)
+  excerpt text 
+  body json // StreamField: paragraphs images, quotes, embeds
+  featured_image_id integer // For article card thumbnails
+  author_id integer [not null]
+  status varchar
+  created_at timestamp
+  updated_at timestamp
+  published_at timestamp
+  slug varchar(200) [unique]
+  category_id integer
+}
+
+Table categories {
+  id integer [primary key, not null]
+  title varchar(30)
+}
+
+Ref user_articles: articles.author_id > users.id // many-to-one
+
+Ref: audits.user_id > articles.author_id
+
+Ref: audits.article_id > articles.id
+
+Ref: audits.artitle_title > articles.title
+
+Ref: audits.article_published > articles.published_at
+
+Ref article_categories: articles.category_id > categories.id
+
+// No gallery table needed
+// Images referenced in body JSON, stored in Wagtail's central Image library
+```
+
+**Why this is perfect for your magazine:**
+1. **Editorial flexibility** - Images exactly where they make sense in the narrative
+2. **Reduces database complexity** - One less table to manage
+3. **Modern CMS experience** - Editors get drag-and-drop content blocks
+4. **Still reuses images** - StreamField references central image library
+5. **Supports your aesthetic** - Mix text, images, quotes, embeds for rich articles
+
+## Visual Example
+
+**Without gallery table (StreamField):**
+```
+Article: "Underground Fashion Week Recap"
+
+[Paragraph] The show opened with...
+[Image] runway-shot-1.jpg
+[Paragraph] Designer X showcased...
+[Image] designer-x-collection.jpg
+[Quote] "This is revolutionary"
+[Image] crowd-reaction.jpg
+[Paragraph] The evening concluded...
+```
