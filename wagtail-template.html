@@ -1,0 +1,238 @@
+{% load static wagtailcore_tags %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}VRC6 - Alternate Lifestyle Publication{% endblock %}</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts - Press Start 2P -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- Motion One for animations -->
+    <script src="https://cdn.jsdelivr.net/npm/motion@11.11.13/dist/motion.js"></script>
+    
+    <style>
+        :root {
+            --vrc6-deep-moss: #052e16;
+            --vrc6-forest: #14532d;
+            --vrc6-lime: #4ade80;
+            --vrc6-phosphor: #bbf7d0;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        
+        .pixel-font {
+            font-family: 'Press Start 2P', monospace;
+        }
+    </style>
+    
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="h-screen flex flex-col overflow-hidden" style="background-color: var(--vrc6-deep-moss)">
+        <!-- Header -->
+        <header 
+            class="flex items-center justify-between px-6 py-4 border-b-2" 
+            style="border-color: var(--vrc6-lime); background-color: var(--vrc6-forest)"
+            x-data="{ contactHover: false }"
+        >
+            <div class="flex items-center">
+                <h1 
+                    class="tracking-tight pixel-font" 
+                    style="font-size: 1.5rem; color: var(--vrc6-lime); text-shadow: 2px 2px 0px var(--vrc6-phosphor)"
+                >
+                    <a href="{% url 'home' %}" style="text-decoration: none; color: inherit;">VRC6</a>
+                </h1>
+            </div>
+            <a 
+                href="{% url 'contact' %}" 
+                class="px-4 py-2 transition-all pixel-font"
+                style="background-color: var(--vrc6-lime); color: var(--vrc6-deep-moss); font-size: 0.6rem; border: 2px solid var(--vrc6-phosphor); box-shadow: 3px 3px 0px var(--vrc6-phosphor); text-decoration: none;"
+                @mouseenter="contactHover = true; $el.style.transform = 'scale(1.05)'"
+                @mouseleave="contactHover = false; $el.style.transform = 'scale(1)'"
+            >
+                CONTACT US
+            </a>
+        </header>
+
+        <!-- Main Content - Bento Grid -->
+        <main class="flex-1 p-4 gap-4 grid grid-cols-1 lg:grid-cols-2 overflow-hidden">
+            <!-- Left Column -->
+            <div class="flex flex-col gap-4 h-full">
+                <!-- Featured Article -->
+                {% if featured_article %}
+                <div 
+                    class="flex-[2] rounded-lg p-6 border-2 transition-all cursor-pointer overflow-hidden"
+                    style="background-color: var(--vrc6-forest); border-color: var(--vrc6-lime); box-shadow: 5px 5px 0px var(--vrc6-phosphor)"
+                    x-data="{ hover: false }"
+                    @mouseenter="hover = true; $el.style.transform = 'scale(1.02)'"
+                    @mouseleave="hover = false; $el.style.transform = 'scale(1)'"
+                    onclick="window.location='{{ featured_article.url }}'"
+                >
+                    <div class="flex flex-col h-full justify-between">
+                        <div>
+                            <span 
+                                class="inline-block px-3 py-1 mb-3 pixel-font"
+                                style="background-color: var(--vrc6-lime); color: var(--vrc6-deep-moss); font-size: 0.5rem"
+                            >
+                                FEATURED
+                            </span>
+                            <h2 
+                                class="mb-4 leading-tight pixel-font"
+                                style="font-size: 1.2rem; color: var(--vrc6-phosphor); line-height: 1.6"
+                            >
+                                {{ featured_article.title }}
+                            </h2>
+                            <p style="color: var(--vrc6-lime); font-size: 0.875rem; line-height: 1.8">
+                                {{ featured_article.intro|truncatewords:25 }}
+                            </p>
+                        </div>
+                        <div 
+                            class="mt-4 pixel-font"
+                            style="font-size: 0.5rem; color: var(--vrc6-lime)"
+                        >
+                            READ MORE &gt;&gt;
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Please Donate -->
+                <div 
+                    class="flex-1 rounded-lg p-6 border-2 transition-all cursor-pointer flex flex-col items-center justify-center text-center"
+                    style="background-color: var(--vrc6-deep-moss); border-color: var(--vrc6-phosphor); box-shadow: 5px 5px 0px var(--vrc6-lime)"
+                    x-data="{ hover: false }"
+                    @mouseenter="hover = true; $el.style.transform = 'scale(1.02)'"
+                    @mouseleave="hover = false; $el.style.transform = 'scale(1)'"
+                    onclick="window.location='{% url 'donate' %}'"
+                >
+                    <svg 
+                        class="mb-3" 
+                        style="color: var(--vrc6-lime); width: 2rem; height: 2rem"
+                        xmlns="http://www.w3.org/2000/svg" 
+                        width="24" 
+                        height="24" 
+                        viewBox="0 0 24 24" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        stroke-width="2" 
+                        stroke-linecap="round" 
+                        stroke-linejoin="round"
+                    >
+                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                    </svg>
+                    <h3 
+                        class="mb-2 pixel-font"
+                        style="font-size: 0.8rem; color: var(--vrc6-phosphor); line-height: 1.6"
+                    >
+                        SUPPORT VRC6
+                    </h3>
+                    <p 
+                        class="mb-3"
+                        style="color: var(--vrc6-lime); font-size: 0.75rem; line-height: 1.6"
+                    >
+                        Help us keep alternative voices alive
+                    </p>
+                    <button
+                        class="px-4 py-2 transition-all pixel-font"
+                        style="background-color: var(--vrc6-lime); color: var(--vrc6-deep-moss); font-size: 0.5rem; border: 2px solid var(--vrc6-phosphor)"
+                        @mouseenter="$el.style.transform = 'scale(1.05)'"
+                        @mouseleave="$el.style.transform = 'scale(1)'"
+                    >
+                        DONATE NOW
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div class="grid grid-rows-4 gap-4 h-full">
+                <!-- Articles Loop -->
+                {% for article in recent_articles %}
+                <div 
+                    class="rounded-lg p-4 border-2 transition-all cursor-pointer overflow-hidden"
+                    style="background-color: var(--vrc6-forest); border-color: var(--vrc6-lime); box-shadow: 4px 4px 0px var(--vrc6-phosphor)"
+                    x-data="{ hover: false }"
+                    @mouseenter="hover = true; $el.style.transform = 'scale(1.02)'"
+                    @mouseleave="hover = false; $el.style.transform = 'scale(1)'"
+                    onclick="window.location='{{ article.url }}'"
+                >
+                    {% if article.category %}
+                    <span 
+                        class="inline-block px-2 py-1 mb-2 pixel-font"
+                        style="background-color: var(--vrc6-deep-moss); color: var(--vrc6-phosphor); font-size: 0.4rem; text-transform: uppercase;"
+                    >
+                        {{ article.category }}
+                    </span>
+                    {% endif %}
+                    <h3 
+                        class="mb-2 leading-tight pixel-font"
+                        style="font-size: 0.7rem; color: var(--vrc6-phosphor); line-height: 1.5"
+                    >
+                        {{ article.title }}
+                    </h3>
+                    <p style="color: var(--vrc6-lime); font-size: 0.75rem; line-height: 1.5">
+                        {{ article.intro|truncatewords:10 }}
+                    </p>
+                </div>
+                {% endfor %}
+
+                <!-- Categories -->
+                <div 
+                    class="rounded-lg p-4 border-2 transition-all cursor-pointer overflow-hidden"
+                    style="background-color: var(--vrc6-deep-moss); border-color: var(--vrc6-phosphor); box-shadow: 4px 4px 0px var(--vrc6-lime)"
+                    x-data="{ hover: false }"
+                    @mouseenter="hover = true; $el.style.transform = 'scale(1.02)'"
+                    @mouseleave="hover = false; $el.style.transform = 'scale(1)'"
+                >
+                    <h3 
+                        class="mb-3 pixel-font"
+                        style="font-size: 0.7rem; color: var(--vrc6-phosphor); line-height: 1.5"
+                    >
+                        BROWSE TOPICS
+                    </h3>
+                    <div class="flex flex-wrap gap-2">
+                        {% for category in categories %}
+                        <a
+                            href="{% url 'category' category.slug %}"
+                            class="px-2 py-1 transition-all pixel-font"
+                            style="background-color: var(--vrc6-lime); color: var(--vrc6-deep-moss); font-size: 0.4rem; text-decoration: none; display: inline-block;"
+                            @mouseenter="$el.style.transform = 'scale(1.05)'"
+                            @mouseleave="$el.style.transform = 'scale(1)'"
+                        >
+                            {{ category.name|upper }}
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer 
+            class="flex items-center justify-center px-6 py-3 border-t-2"
+            style="border-color: var(--vrc6-lime); background-color: var(--vrc6-forest)"
+            x-data="{ year: new Date().getFullYear() }"
+        >
+            <p class="pixel-font" style="font-size: 0.5rem; color: var(--vrc6-phosphor)">
+                VRC6 © <span x-text="year"></span> - ALTERNATE LIFESTYLE PUBLICATION
+            </p>
+        </footer>
+    </div>
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
