@@ -17,6 +17,7 @@ Table users {
   email varchar [unique]
   password varchar(30)
   salt varchar
+  activation_tkn varchar
 }
 
 Table articles {
@@ -34,10 +35,37 @@ Table articles {
   category_id integer
 }
 
+enum category_type {
+  art
+  locales
+  artists
+  events
+  interviews
+  opinions
+  games
+  photoshoots
+}
+
 Table categories {
   id integer [primary key, not null]
-  title varchar(30)
+  type category_type // Enum category_type
 }
+
+enum token_type {
+  activation
+  password_reset
+}
+
+Table tokens {
+  id integer [primary key, not null]
+  user_id integer [not null]
+  token_hash varchar
+  type token_type // Enum token_type
+  expires_at timestamp
+  created_at timestamp
+}
+
+Ref user_token: tokens.user_id > users.id
 
 Ref user_articles: articles.author_id > users.id // many-to-one
 
