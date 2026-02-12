@@ -54,6 +54,7 @@ Table categories {
 enum token_type {
   activation
   password_reset
+  email_change
 }
 
 Table tokens {
