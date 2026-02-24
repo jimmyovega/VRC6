@@ -133,8 +133,8 @@ sequenceDiagram
   - Generate secure random password (16 chars: letters, numbers, symbols)
   - Salt and hash password using Django's default (PBKDF2-SHA256)
   - Generate activation token (UUID4)
-  - Set `created_at` timestamp
-  - Set `activation_expires_at` (7 days from now)
+  - Set `users.created_at` timestamp
+  - Set `tokens.expires_at` (7 days from now)
   - Send welcome email via SMTP
   - Create audit log entry
 - **Email Content**:

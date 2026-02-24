@@ -2,7 +2,10 @@
 // Docs: https://dbml.dbdiagram.io/docs
 
 Table audits {
+  id integer [primary key, not null]
   user_id integer
+  user_created timestamp
+  user_created_by integer
   article_id integer
   artitle_title varchar
   article_published timestamp
