@@ -1,0 +1,22 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"compatibility_date": "2026-06-26",
+	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	"name": "vrc6",
+	"main": "@astrojs/cloudflare/entrypoints/server",
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS"
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "vrc6-db",
+			"database_id": "178154f8-c57b-4480-9d9a-920d63af539c",
+			"migrations_dir": "migrations"
+		}
+	],
+	"observability": {
+		"enabled": true
+	}
+}
