@@ -2,8 +2,13 @@
 // Base layout: retro neon-green pixel theme (palette from docs/legacy/Figmaprompt.md).
 interface Props {
   title?: string;
+  description?: string;
 }
-const { title = "VRC6 — Alternate Lifestyle Publication" } = Astro.props;
+const {
+  title = "VRC6 — Alternate Lifestyle Publication",
+  description = "VRC6 — interviews, events, games, and underground culture. A retro neon-green magazine.",
+} = Astro.props;
+const canonical = Astro.url.href;
 ---
 
 <!doctype html>
@@ -13,6 +18,12 @@ const { title = "VRC6 — Alternate Lifestyle Publication" } = Astro.props;
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="generator" content={Astro.generator} />
+    <meta name="description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <link rel="canonical" href={canonical} />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -69,6 +80,7 @@ const { title = "VRC6 — Alternate Lifestyle Publication" } = Astro.props;
     letter-spacing: 0.5px;
   }
 
+  /* ---- Layout chrome ---- */
   .site-header {
     display: flex;
     align-items: center;
@@ -77,7 +89,6 @@ const { title = "VRC6 — Alternate Lifestyle Publication" } = Astro.props;
     background-color: var(--forest);
     border-bottom: 2px solid var(--lime);
   }
-
   .logo {
     font-family: "Press Start 2P", monospace;
     font-size: 1.5rem;
@@ -85,7 +96,6 @@ const { title = "VRC6 — Alternate Lifestyle Publication" } = Astro.props;
     text-decoration: none;
     text-shadow: 2px 2px 0 var(--phosphor);
   }
-
   .contact {
     font-size: 0.6rem;
     color: var(--deep-moss);
@@ -95,7 +105,6 @@ const { title = "VRC6 — Alternate Lifestyle Publication" } = Astro.props;
     border: 2px solid var(--phosphor);
     box-shadow: 3px 3px 0 var(--phosphor);
   }
-
   .site-main {
     flex: 1;
     padding: 1.5rem;
@@ -103,7 +112,6 @@ const { title = "VRC6 — Alternate Lifestyle Publication" } = Astro.props;
     width: 100%;
     margin: 0 auto;
   }
-
   .site-footer {
     padding: 0.9rem;
     text-align: center;
@@ -114,5 +122,94 @@ const { title = "VRC6 — Alternate Lifestyle Publication" } = Astro.props;
     font-size: 0.5rem;
     margin: 0;
     color: var(--phosphor);
+  }
+
+  /* ---- Shared component primitives (reused across pages) ---- */
+  .card {
+    display: block;
+    border: 2px solid var(--lime);
+    border-radius: 8px;
+    padding: 1.25rem;
+    background-color: var(--forest);
+    box-shadow: 5px 5px 0 var(--phosphor);
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.1s ease;
+  }
+  a.card:hover {
+    transform: scale(1.02);
+  }
+  .card p {
+    color: var(--lime);
+    line-height: 1.6;
+  }
+  .card h2,
+  .card h3 {
+    color: var(--phosphor);
+  }
+
+  .tag,
+  .cat {
+    display: inline-block;
+    background-color: var(--lime);
+    color: var(--deep-moss);
+    font-size: 0.5rem;
+    padding: 0.35rem 0.6rem;
+    margin-bottom: 0.6rem;
+  }
+  .cat {
+    background-color: var(--deep-moss);
+    color: var(--phosphor);
+  }
+
+  .chip {
+    display: inline-block;
+    background-color: var(--lime);
+    color: var(--deep-moss);
+    font-size: 0.4rem;
+    padding: 0.35rem 0.5rem;
+    text-decoration: none;
+    transition: transform 0.1s ease;
+  }
+  a.chip:hover {
+    transform: scale(1.05);
+  }
+
+  .btn {
+    display: inline-block;
+    background-color: var(--lime);
+    color: var(--deep-moss);
+    font-size: 0.5rem;
+    padding: 0.6rem 0.9rem;
+    border: 2px solid var(--phosphor);
+    text-decoration: none;
+  }
+
+  /* ---- Page helpers (detail / category / stubs) ---- */
+  .back {
+    display: inline-block;
+    font-size: 0.5rem;
+    color: var(--lime);
+    text-decoration: none;
+    margin-bottom: 1rem;
+  }
+  .page-title {
+    font-size: 1.4rem;
+    line-height: 1.6;
+    color: var(--lime);
+    text-shadow: 2px 2px 0 var(--phosphor);
+    margin: 0 0 1rem;
+  }
+  .muted {
+    color: var(--lime);
+    font-size: 0.85rem;
+  }
+  .prose {
+    max-width: 70ch;
+  }
+  .prose p {
+    color: var(--phosphor);
+    line-height: 1.9;
+    margin: 0 0 1.1rem;
   }
 </style>

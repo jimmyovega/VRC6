@@ -1,0 +1,24 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+// Ensure a 404 status whether reached as the not-found route or via Astro.rewrite("/404").
+Astro.response.status = 404;
+---
+
+<Layout title="Not found — VRC6">
+  <div class="notfound">
+    <h1 class="page-title pixel">404</h1>
+    <p class="muted">This page wandered off into the static.</p>
+    <a class="btn pixel" href="/">BACK TO HOME</a>
+  </div>
+</Layout>
+
+<style>
+  .notfound {
+    text-align: center;
+    padding: 3rem 1rem;
+  }
+  .notfound .btn {
+    margin-top: 1.5rem;
+  }
+</style>

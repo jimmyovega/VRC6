@@ -1,0 +1,52 @@
+---
+// Article detail page. Renders only published articles; anything else → themed 404.
+import { env } from "cloudflare:workers";
+import Layout from "../../layouts/Layout.astro";
+import { getDb } from "../../db";
+import { getPublishedArticleBySlug } from "../../db/queries";
+import { renderBodyToHtml } from "../../lib/body";
+import { formatDate } from "../../lib/date";
+
+const { slug } = Astro.params;
+const db = getDb(env.DB);
+const article = slug ? await getPublishedArticleBySlug(db, slug) : null;
+
+if (!article) {
+  return Astro.rewrite("/404");
+}
+
+const bodyHtml = renderBodyToHtml(article.body);
+const byline = article.author ?? article.authorUsername ?? "VRC6";
+const dateLabel = formatDate(article.publishedAt);
+---
+
+<Layout title={`${article.title} — VRC6`} description={article.excerpt ?? undefined}>
+  <article class="prose">
+    <a
+      class="back pixel"
+      href={article.categorySlug ? `/category/${article.categorySlug}` : "/"}
+      >&lt;&lt; {article.category ?? "HOME"}</a
+    >
+    {article.category && <span class="cat pixel">{article.category}</span>}
+    <h1 class="page-title pixel">{article.title}</h1>
+    <p class="byline pixel">
+      By {byline}{dateLabel && ` · ${dateLabel}`}
+    </p>
+    {article.excerpt && <p class="lead">{article.excerpt}</p>}
+    <div class="body" set:html={bodyHtml} />
+  </article>
+</Layout>
+
+<style>
+  .byline {
+    font-size: 0.5rem;
+    color: var(--lime);
+    margin: 0 0 1.5rem;
+  }
+  .lead {
+    font-size: 1.05rem;
+    color: var(--phosphor);
+    font-style: italic;
+    margin-bottom: 1.5rem;
+  }
+</style>

@@ -1,0 +1,24 @@
+---
+// A standard article card, reused on the home page and category pages.
+interface Props {
+  title: string;
+  excerpt?: string | null;
+  slug: string;
+  category?: string | null;
+}
+const { title, excerpt, slug, category } = Astro.props;
+---
+
+<a class="card article" href={`/articles/${slug}`}>
+  {category && <span class="cat pixel">{category}</span>}
+  <h3 class="pixel card-title">{title}</h3>
+  {excerpt && <p>{excerpt}</p>}
+</a>
+
+<style>
+  .card-title {
+    font-size: 0.7rem;
+    line-height: 1.5;
+    margin: 0 0 0.5rem;
+  }
+</style>
