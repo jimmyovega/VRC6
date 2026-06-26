@@ -1,0 +1,190 @@
+---
+// VRC6 front page — bento grid of published articles, read live from D1.
+// (M0 proves the full path: Astro SSR on Workers → Drizzle → D1.)
+import { env } from "cloudflare:workers";
+import { desc, eq } from "drizzle-orm";
+import Layout from "../layouts/Layout.astro";
+import { getDb, schema } from "../db";
+
+const db = getDb(env.DB);
+
+const published = await db
+  .select({
+    id: schema.articles.id,
+    title: schema.articles.title,
+    excerpt: schema.articles.excerpt,
+    slug: schema.articles.slug,
+    category: schema.categories.label,
+  })
+  .from(schema.articles)
+  .leftJoin(schema.categories, eq(schema.articles.categoryId, schema.categories.id))
+  .where(eq(schema.articles.status, "published"))
+  .orderBy(desc(schema.articles.publishedAt));
+
+const categories = await db
+  .select({ slug: schema.categories.slug, label: schema.categories.label })
+  .from(schema.categories)
+  .orderBy(schema.categories.label);
+
+const [featured, ...rest] = published;
+---
+
+<Layout>
+  <div class="bento">
+    <!-- Left column -->
+    <section class="col">
+      {
+        featured && (
+          <a class="card featured" href={`/articles/${featured.slug}`}>
+            <span class="tag pixel">FEATURED</span>
+            <h2 class="pixel">{featured.title}</h2>
+            <p>{featured.excerpt}</p>
+            <span class="more pixel">READ MORE &gt;&gt;</span>
+          </a>
+        )
+      }
+      <div class="card donate">
+        <h3 class="pixel">SUPPORT VRC6</h3>
+        <p>Help us keep alternative voices alive</p>
+        <span class="btn pixel">DONATE NOW</span>
+      </div>
+    </section>
+
+    <!-- Right column -->
+    <section class="col grid-right">
+      {
+        rest.map((a) => (
+          <a class="card article" href={`/articles/${a.slug}`}>
+            {a.category && <span class="cat pixel">{a.category}</span>}
+            <h3 class="pixel">{a.title}</h3>
+            <p>{a.excerpt}</p>
+          </a>
+        ))
+      }
+      <div class="card topics">
+        <h3 class="pixel">BROWSE TOPICS</h3>
+        <div class="chips">
+          {
+            categories.map((c) => (
+              <a class="chip pixel" href={`/category/${c.slug}`}>
+                {c.label.toUpperCase()}
+              </a>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+  </div>
+</Layout>
+
+<style>
+  .bento {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  @media (min-width: 900px) {
+    .bento {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  .col {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .grid-right {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .card {
+    border: 2px solid var(--lime);
+    border-radius: 8px;
+    padding: 1.25rem;
+    background-color: var(--forest);
+    box-shadow: 5px 5px 0 var(--phosphor);
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.1s ease;
+  }
+  a.card:hover {
+    transform: scale(1.02);
+  }
+  .card p {
+    color: var(--lime);
+    line-height: 1.6;
+  }
+
+  .featured {
+    flex: 2;
+  }
+  .featured h2 {
+    font-size: 1.2rem;
+    line-height: 1.6;
+    color: var(--phosphor);
+  }
+  .tag,
+  .cat {
+    display: inline-block;
+    background-color: var(--lime);
+    color: var(--deep-moss);
+    font-size: 0.5rem;
+    padding: 0.35rem 0.6rem;
+    margin-bottom: 0.6rem;
+  }
+  .cat {
+    background-color: var(--deep-moss);
+    color: var(--phosphor);
+  }
+  .more {
+    display: block;
+    margin-top: 1rem;
+    font-size: 0.5rem;
+    color: var(--lime);
+  }
+
+  .article h3,
+  .topics h3,
+  .donate h3 {
+    font-size: 0.7rem;
+    line-height: 1.5;
+    color: var(--phosphor);
+  }
+
+  .donate {
+    background-color: var(--deep-moss);
+    border-color: var(--phosphor);
+    box-shadow: 5px 5px 0 var(--lime);
+    text-align: center;
+  }
+  .btn {
+    display: inline-block;
+    margin-top: 0.5rem;
+    background-color: var(--lime);
+    color: var(--deep-moss);
+    font-size: 0.5rem;
+    padding: 0.6rem 0.9rem;
+    border: 2px solid var(--phosphor);
+  }
+
+  .topics {
+    background-color: var(--deep-moss);
+    border-color: var(--phosphor);
+    box-shadow: 4px 4px 0 var(--lime);
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+  .chip {
+    background-color: var(--lime);
+    color: var(--deep-moss);
+    font-size: 0.4rem;
+    padding: 0.35rem 0.5rem;
+    text-decoration: none;
+  }
+</style>

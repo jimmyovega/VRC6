@@ -1,0 +1,118 @@
+---
+// Base layout: retro neon-green pixel theme (palette from docs/legacy/Figmaprompt.md).
+interface Props {
+  title?: string;
+}
+const { title = "VRC6 — Alternate Lifestyle Publication" } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content={Astro.generator} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
+    <title>{title}</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="logo pixel" href="/">VRC6</a>
+      <a class="contact pixel" href="/contact">CONTACT US</a>
+    </header>
+
+    <main class="site-main">
+      <slot />
+    </main>
+
+    <footer class="site-footer">
+      <p class="pixel">VRC6 © {new Date().getFullYear()} — ALTERNATE LIFESTYLE PUBLICATION</p>
+    </footer>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    --deep-moss: #052e16; /* background / shadows */
+    --forest: #14532d; /* mid-tones */
+    --lime: #4ade80; /* primary accents */
+    --phosphor: #bbf7d0; /* highlight / text */
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    background-color: var(--deep-moss);
+    color: var(--phosphor);
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .pixel {
+    font-family: "Press Start 2P", monospace;
+    letter-spacing: 0.5px;
+  }
+
+  .site-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.5rem;
+    background-color: var(--forest);
+    border-bottom: 2px solid var(--lime);
+  }
+
+  .logo {
+    font-family: "Press Start 2P", monospace;
+    font-size: 1.5rem;
+    color: var(--lime);
+    text-decoration: none;
+    text-shadow: 2px 2px 0 var(--phosphor);
+  }
+
+  .contact {
+    font-size: 0.6rem;
+    color: var(--deep-moss);
+    background-color: var(--lime);
+    padding: 0.6rem 0.9rem;
+    text-decoration: none;
+    border: 2px solid var(--phosphor);
+    box-shadow: 3px 3px 0 var(--phosphor);
+  }
+
+  .site-main {
+    flex: 1;
+    padding: 1.5rem;
+    max-width: 1280px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .site-footer {
+    padding: 0.9rem;
+    text-align: center;
+    background-color: var(--forest);
+    border-top: 2px solid var(--lime);
+  }
+  .site-footer .pixel {
+    font-size: 0.5rem;
+    margin: 0;
+    color: var(--phosphor);
+  }
+</style>
