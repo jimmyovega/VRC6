@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import {
   defineWorkersConfig,
@@ -8,6 +9,12 @@ import {
 // as production, read from wrangler.jsonc. D1 migrations are loaded here and
 // applied to each test's isolated database in test/apply-migrations.ts.
 export default defineWorkersConfig(async () => {
+  // The pool reads the whole wrangler.jsonc, including the Astro
+  // `assets.directory` (./dist). Ensure it exists so config parsing doesn't
+  // fail when tests run before a build (e.g. in CI). An empty dir is fine —
+  // tests don't use the ASSETS binding.
+  fs.mkdirSync(path.join(import.meta.dirname, "dist"), { recursive: true });
+
   const migrations = await readD1Migrations(
     path.join(import.meta.dirname, "migrations"),
   );
