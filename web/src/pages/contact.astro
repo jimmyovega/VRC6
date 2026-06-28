@@ -1,9 +1,10 @@
 ---
+import Breadcrumb from "../components/Breadcrumb.astro";
 import Layout from "../layouts/Layout.astro";
 ---
 
 <Layout title="Contact — VRC6" description="Get in touch with VRC6.">
-  <a class="back pixel" href="/">&lt;&lt; HOME</a>
+  <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Contact" }]} />
   <h1 class="page-title pixel">Contact</h1>
   <div class="prose">
     <p>

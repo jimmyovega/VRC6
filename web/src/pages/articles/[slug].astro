@@ -1,6 +1,7 @@
 ---
 // Article detail page. Renders only published articles; anything else → themed 404.
 import { env } from "cloudflare:workers";
+import Breadcrumb from "../../components/Breadcrumb.astro";
 import Layout from "../../layouts/Layout.astro";
 import { getDb } from "../../db";
 import { getPublishedArticleBySlug } from "../../db/queries";
@@ -22,12 +23,19 @@ const dateLabel = formatDate(article.publishedAt);
 
 <Layout title={`${article.title} — VRC6`} description={article.excerpt ?? undefined}>
   <article class="prose">
-    <a
-      class="back pixel"
-      href={article.categorySlug ? `/category/${article.categorySlug}` : "/"}
-      >&lt;&lt; {article.category ?? "HOME"}</a
-    >
-    {article.category && <span class="cat pixel">{article.category}</span>}
+    <Breadcrumb
+      items={[
+        { label: "Home", href: "/" },
+        ...(article.categorySlug
+          ? [
+              {
+                label: article.category ?? "Category",
+                href: `/category/${article.categorySlug}`,
+              },
+            ]
+          : []),
+      ]}
+    />
     <h1 class="page-title pixel">{article.title}</h1>
     <p class="byline pixel">
       By {byline}{dateLabel && ` · ${dateLabel}`}

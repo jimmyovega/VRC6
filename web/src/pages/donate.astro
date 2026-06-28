@@ -1,9 +1,10 @@
 ---
+import Breadcrumb from "../components/Breadcrumb.astro";
 import Layout from "../layouts/Layout.astro";
 ---
 
 <Layout title="Support VRC6" description="Help keep VRC6's alternative voices alive.">
-  <a class="back pixel" href="/">&lt;&lt; HOME</a>
+  <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Support" }]} />
   <h1 class="page-title pixel">Support VRC6</h1>
   <div class="prose">
     <p>

@@ -20,7 +20,7 @@ INSERT INTO categories (type, slug, label) VALUES
   ('interviews', 'interviews', 'Interviews'),
   ('opinions',   'opinions',   'Opinions'),
   ('games',      'games',      'Games'),
-  ('photoshoots','photoshoots','Photoshoots');
+  ('photography','photography','Photography');
 
 -- Sample published articles.
 INSERT INTO articles (title, excerpt, body, author_id, category_id, status, slug, published_at)

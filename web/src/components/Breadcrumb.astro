@@ -1,0 +1,55 @@
+---
+// Breadcrumb nav rendered as "Home << Category" — items are links, the "<<"
+// is a plain separator (not a link). The last item with no href is the
+// current page (not linked).
+interface Crumb {
+  label: string;
+  href?: string | null;
+}
+interface Props {
+  items: Crumb[];
+}
+const { items } = Astro.props;
+---
+
+<nav class="crumbs pixel" aria-label="Breadcrumb">
+  {
+    items.map((crumb, i) => (
+      <Fragment>
+        {i > 0 && <span class="sep" aria-hidden="true">&lt;&lt;</span>}
+        {crumb.href ? (
+          <a href={crumb.href}>{crumb.label}</a>
+        ) : (
+          <span class="current" aria-current="page">
+            {crumb.label}
+          </span>
+        )}
+      </Fragment>
+    ))
+  }
+</nav>
+
+<style>
+  .crumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .crumbs a {
+    color: var(--lime);
+    text-decoration: none;
+  }
+  .crumbs a:hover {
+    text-decoration: underline;
+  }
+  .sep {
+    color: var(--phosphor);
+    opacity: 0.55;
+  }
+  .current {
+    color: var(--phosphor);
+  }
+</style>

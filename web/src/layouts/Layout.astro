@@ -54,6 +54,7 @@ const canonical = Astro.url.href;
     --forest: #14532d; /* mid-tones */
     --lime: #4ade80; /* primary accents */
     --phosphor: #bbf7d0; /* highlight / text */
+    --ink: #020c06; /* near-black for pixel-depth text shadows */
   }
 
   * {
@@ -197,7 +198,7 @@ const canonical = Astro.url.href;
     font-size: 1.4rem;
     line-height: 1.6;
     color: var(--lime);
-    text-shadow: 2px 2px 0 var(--phosphor);
+    text-shadow: 2px 2px 0 var(--ink);
     margin: 0 0 1rem;
   }
   .muted {

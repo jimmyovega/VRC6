@@ -2,6 +2,7 @@
 // Category browse page. Lists published articles in the category; unknown → themed 404.
 import { env } from "cloudflare:workers";
 import ArticleCard from "../../components/ArticleCard.astro";
+import Breadcrumb from "../../components/Breadcrumb.astro";
 import Layout from "../../layouts/Layout.astro";
 import { getDb } from "../../db";
 import { getArticlesByCategory, getCategoryBySlug } from "../../db/queries";
@@ -21,7 +22,7 @@ const articles = await getArticlesByCategory(db, category.slug);
   title={`${category.label} — VRC6`}
   description={`Articles in ${category.label} on VRC6.`}
 >
-  <a class="back pixel" href="/">&lt;&lt; HOME</a>
+  <Breadcrumb items={[{ label: "Home", href: "/" }, { label: category.label }]} />
   <h1 class="page-title pixel">{category.label}</h1>
 
   {
