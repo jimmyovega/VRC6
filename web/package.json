@@ -12,7 +12,11 @@
     "astro": "astro",
     "generate-types": "wrangler types",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "e2e:setup": "npm run build && npm run db:migrate:local && npm run db:seed:local",
+    "test:e2e": "playwright test",
+    "db:migrate:local": "wrangler d1 migrations apply vrc6-db --local",
+    "db:seed:local": "wrangler d1 execute vrc6-db --local --file ./seed.sql"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.0.1",
@@ -22,6 +26,7 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.12.21",
+    "@playwright/test": "^1.61.1",
     "@types/node": "^26.0.1",
     "drizzle-kit": "^0.31.10",
     "vitest": "~3.2.0"
