@@ -1,0 +1,43 @@
+---
+import Layout from "../../layouts/Layout.astro";
+
+// Route protection is enforced in middleware; a user is guaranteed here.
+const user = Astro.locals.user!;
+---
+
+<Layout center topShare={1} bottomShare={3} title="Dashboard — VRC6">
+  <div class="prose dash">
+    <h1 class="page-title pixel">Dashboard</h1>
+    <p>
+      Signed in as <strong>{user.name}</strong> ({user.email}).
+    </p>
+    <p class="meta pixel">
+      ROLE: {user.role.toUpperCase()} · STATUS: {user.status.toUpperCase()}
+    </p>
+    {
+      user.role === "admin" && (
+        <p>
+          <a class="btn pixel" href="/admin">
+            ADMIN
+          </a>
+        </p>
+      )
+    }
+    <p class="muted">Your drafts and the article editor arrive in M3.</p>
+  </div>
+</Layout>
+
+<style>
+  .dash {
+    max-width: 640px;
+    margin-inline: auto;
+  }
+  .meta {
+    font-size: 0.5rem;
+    color: var(--lime);
+  }
+  .btn {
+    display: inline-block;
+    text-decoration: none;
+  }
+</style>

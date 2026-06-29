@@ -1,0 +1,31 @@
+---
+import Layout from "../../layouts/Layout.astro";
+
+// Admin-only — enforced in middleware.
+const user = Astro.locals.user!;
+---
+
+<Layout center topShare={1} bottomShare={3} title="Admin — VRC6">
+  <div class="prose admin">
+    <h1 class="page-title pixel">Admin</h1>
+    <p>Welcome, <strong>{user.name}</strong>.</p>
+    <p class="muted">
+      User management — invite editors, suspend / reactivate, change roles — arrives
+      in Phase C.
+    </p>
+    <p>
+      <a class="btn pixel back-link" href="/dashboard">BACK TO DASHBOARD</a>
+    </p>
+  </div>
+</Layout>
+
+<style>
+  .admin {
+    max-width: 640px;
+    margin-inline: auto;
+  }
+  .back-link {
+    display: inline-block;
+    text-decoration: none;
+  }
+</style>

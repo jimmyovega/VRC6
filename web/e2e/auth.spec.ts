@@ -28,3 +28,35 @@ test("E2E-11 wrong credentials show an error", async ({ page }) => {
   await page.getByRole("button", { name: "SIGN IN" }).click();
   await expect(page.getByText("Invalid email or password.")).toBeVisible();
 });
+
+async function signUpAndLogin(page: any, request: any, email: string) {
+  await request.post("/api/auth/sign-up/email", {
+    data: { email, password: "Sup3rSecret!23", name: email },
+  });
+  await page.goto("/login");
+  await page.locator('input[name="email"]').fill(email);
+  await page.locator('input[name="password"]').fill("Sup3rSecret!23");
+  await page.getByRole("button", { name: "SIGN IN" }).click();
+  await page.waitForURL("http://localhost:8788/");
+}
+
+test("E2E-12 anonymous users are redirected from protected routes to login", async ({ page }) => {
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/login$/);
+  await page.goto("/admin");
+  await expect(page).toHaveURL(/\/login$/);
+});
+
+test("E2E-13 an editor can reach the dashboard but not admin", async ({ page, request }) => {
+  await signUpAndLogin(page, request, `editor-${Date.now()}@vrc6.com`);
+  await page.goto("/admin");
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
+});
+
+test("E2E-14 the bootstrap admin (ADMIN_EMAIL) can reach admin", async ({ page, request }) => {
+  // owner@vrc6.com matches ADMIN_EMAIL → becomes admin on sign-up.
+  await signUpAndLogin(page, request, "owner@vrc6.com");
+  await page.goto("/admin");
+  await expect(page.getByRole("heading", { level: 1, name: "Admin" })).toBeVisible();
+});

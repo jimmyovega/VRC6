@@ -47,8 +47,10 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
-      - name: Provide a throwaway auth secret for the local E2E server
-        run: echo "BETTER_AUTH_SECRET=ci-e2e-not-a-real-secret-0123456789abcdef0123456789" > .dev.vars
+      - name: Provide a throwaway auth secret + admin email for the local E2E server
+        run: |
+          echo "BETTER_AUTH_SECRET=ci-e2e-not-a-real-secret-0123456789abcdef0123456789" > .dev.vars
+          echo "ADMIN_EMAIL=owner@vrc6.com" >> .dev.vars
 
       - name: Set up local D1 (build + migrate + seed)
         run: npm run e2e:setup

@@ -11,6 +11,7 @@ import { account, session, user, verification } from "../db/schema";
 const authEnv = env as typeof env & {
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
+  ADMIN_EMAIL?: string;
 };
 
 let cached: ReturnType<typeof betterAuth> | null = null;
@@ -27,6 +28,19 @@ export function getAuth() {
     }),
     emailAndPassword: {
       enabled: true,
+    },
+    databaseHooks: {
+      user: {
+        create: {
+          // Bootstrap: the configured owner email becomes an active admin on sign-up.
+          before: async (newUser) => {
+            if (authEnv.ADMIN_EMAIL && newUser.email === authEnv.ADMIN_EMAIL) {
+              return { data: { ...newUser, role: "admin", status: "active" } };
+            }
+            return { data: newUser };
+          },
+        },
+      },
     },
     user: {
       additionalFields: {

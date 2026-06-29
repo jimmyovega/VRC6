@@ -47,6 +47,8 @@ const user = Astro.locals.user;
       <a class="logo pixel" href="/">VRC6</a>
       <nav class="header-nav">
         <a class="contact pixel" href="/contact">CONTACT US</a>
+        {user && <a class="contact pixel" href="/dashboard">DASHBOARD</a>}
+        {user?.role === "admin" && <a class="contact pixel" href="/admin">ADMIN</a>}
         {
           user ? (
             <button class="contact pixel" id="logout-btn" type="button">
