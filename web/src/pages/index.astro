@@ -1,19 +1,25 @@
 ---
 // VRC6 front page — bento grid of published articles, read live from D1.
+// Left column: featured + browse-topics + support. Right column: the paginated
+// article feed (<<  >>) so the layout stays within one screen no matter how many
+// articles exist. All cards are in the DOM (only hidden) so they remain crawlable.
 import { env } from "cloudflare:workers";
 import ArticleCard from "../components/ArticleCard.astro";
 import Layout from "../layouts/Layout.astro";
 import { getDb } from "../db";
 import { getCategories, getPublishedArticles } from "../db/queries";
 
+const PER_PAGE = 3;
+
 const db = getDb(env.DB);
 const published = await getPublishedArticles(db);
 const categories = await getCategories(db);
 
 const [featured, ...rest] = published;
+const pageCount = Math.max(1, Math.ceil(rest.length / PER_PAGE));
 ---
 
-<Layout>
+<Layout center>
   <div class="bento">
     <!-- Left column -->
     <section class="col">
@@ -27,25 +33,7 @@ const [featured, ...rest] = published;
           </a>
         )
       }
-      <a class="card donate" href="/donate">
-        <h3 class="pixel donate-title">SUPPORT VRC6</h3>
-        <p>Help us keep alternative voices alive</p>
-        <span class="btn pixel">DONATE NOW</span>
-      </a>
-    </section>
 
-    <!-- Right column -->
-    <section class="col grid-right">
-      {
-        rest.map((a) => (
-          <ArticleCard
-            title={a.title}
-            excerpt={a.excerpt}
-            slug={a.slug}
-            category={a.category}
-          />
-        ))
-      }
       <div class="card topics">
         <h3 class="pixel topics-title">BROWSE TOPICS</h3>
         <div class="chips">
@@ -58,9 +46,99 @@ const [featured, ...rest] = published;
           }
         </div>
       </div>
+
+      <a class="card donate" href="/donate">
+        <h3 class="pixel donate-title">SUPPORT VRC6</h3>
+        <p>Help us keep alternative voices alive</p>
+        <span class="btn pixel">DONATE NOW</span>
+      </a>
+    </section>
+
+    <!-- Right column -->
+    <section class="col">
+      <div class="feed" data-per-page={PER_PAGE} style={`--rows:${PER_PAGE}`}>
+        {
+          rest.map((a, i) => (
+            <div
+              class="feed-item"
+              data-page={Math.floor(i / PER_PAGE)}
+              style={i >= PER_PAGE ? "display:none" : undefined}
+            >
+              <ArticleCard
+                title={a.title}
+                excerpt={a.excerpt}
+                slug={a.slug}
+                category={a.category}
+              />
+            </div>
+          ))
+        }
+      </div>
+
+      {
+        rest.length > PER_PAGE && (
+          <div class="pager pixel">
+            <button
+              class="pager-btn pixel"
+              type="button"
+              data-dir="-1"
+              aria-label="Previous articles"
+              disabled
+            >
+              &lt;&lt;
+            </button>
+            <span class="pager-status" aria-live="polite">1 / {pageCount}</span>
+            <button
+              class="pager-btn pixel"
+              type="button"
+              data-dir="1"
+              aria-label="More articles"
+            >
+              &gt;&gt;
+            </button>
+          </div>
+        )
+      }
     </section>
   </div>
 </Layout>
+
+<script>
+  const feed = document.querySelector<HTMLElement>(".feed");
+  if (feed) {
+    const perPage = Number(feed.getAttribute("data-per-page")) || 3;
+    const items = Array.from(feed.querySelectorAll<HTMLElement>(".feed-item"));
+    const pages = Math.max(1, Math.ceil(items.length / perPage));
+    const status = document.querySelector<HTMLElement>(".pager-status");
+    const prevBtn = document.querySelector<HTMLButtonElement>('.pager-btn[data-dir="-1"]');
+    const nextBtn = document.querySelector<HTMLButtonElement>('.pager-btn[data-dir="1"]');
+    let page = 0;
+
+    const render = () => {
+      items.forEach((el, i) => {
+        el.style.display = Math.floor(i / perPage) === page ? "" : "none";
+      });
+      if (status) status.textContent = `${page + 1} / ${pages}`;
+      if (prevBtn) prevBtn.disabled = page === 0;
+      if (nextBtn) nextBtn.disabled = page >= pages - 1;
+    };
+
+    prevBtn?.addEventListener("click", () => {
+      if (page > 0) {
+        page--;
+        render();
+      }
+    });
+    nextBtn?.addEventListener("click", () => {
+      if (page < pages - 1) {
+        page++;
+        render();
+      }
+    });
+
+    render();
+  }
+</script>
 
 <style>
   .bento {
@@ -72,29 +150,37 @@ const [featured, ...rest] = published;
     .bento {
       grid-template-columns: 1fr 1fr;
     }
+    /* Reserve the height of a FULL page of cards so partial pages keep empty
+       slots — the pager position and the left column height stay constant. */
+    .feed {
+      height: calc(var(--rows) * var(--card-h) + (var(--rows) - 1) * 1rem);
+    }
   }
   .col {
     display: flex;
     flex-direction: column;
     gap: 1rem;
   }
-  .grid-right {
-    display: grid;
-    grid-template-columns: 1fr;
+  .feed {
+    display: flex;
+    flex-direction: column;
     gap: 1rem;
   }
 
   .featured {
-    flex: 2;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
   }
   .feat-title {
     font-size: 1.2rem;
     line-height: 1.6;
     margin: 0 0 0.75rem;
   }
+  /* push "READ MORE" to the bottom so the featured card fills the column height */
   .more {
     display: block;
-    margin-top: 1rem;
+    margin-top: auto;
     font-size: 0.5rem;
     color: var(--lime);
   }
@@ -110,6 +196,34 @@ const [featured, ...rest] = published;
     font-size: 0.7rem;
     line-height: 1.5;
     margin: 0 0 0.5rem;
+  }
+
+  /* Pager */
+  .pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+  }
+  .pager-btn {
+    background-color: var(--lime);
+    color: var(--deep-moss);
+    border: 2px solid var(--phosphor);
+    padding: 0.5rem 0.8rem;
+    font-size: 0.6rem;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+  }
+  .pager-btn:hover:not(:disabled) {
+    transform: scale(1.05);
+  }
+  .pager-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .pager-status {
+    font-size: 0.5rem;
+    color: var(--phosphor);
   }
 
   .topics {

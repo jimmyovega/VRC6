@@ -3,10 +3,16 @@
 interface Props {
   title?: string;
   description?: string;
+  center?: boolean;
+  topShare?: number; // proportion of leftover space above the content (with `center`)
+  bottomShare?: number; // proportion below — e.g. 1 / 3 puts content 25% from the top
 }
 const {
   title = "VRC6 — Alternate Lifestyle Publication",
   description = "VRC6 — interviews, events, games, and underground culture. A retro neon-green magazine.",
+  center = false,
+  topShare = 1,
+  bottomShare = 1,
 } = Astro.props;
 const canonical = Astro.url.href;
 ---
@@ -32,7 +38,10 @@ const canonical = Astro.url.href;
     />
     <title>{title}</title>
   </head>
-  <body>
+  <body
+    class={center ? "centered" : undefined}
+    style={center ? `--top-share:${topShare};--bottom-share:${bottomShare}` : undefined}
+  >
     <header class="site-header">
       <a class="logo pixel" href="/">VRC6</a>
       <a class="contact pixel" href="/contact">CONTACT US</a>
@@ -55,6 +64,7 @@ const canonical = Astro.url.href;
     --lime: #4ade80; /* primary accents */
     --phosphor: #bbf7d0; /* highlight / text */
     --ink: #020c06; /* near-black for pixel-depth text shadows */
+    --card-h: 165px; /* uniform article-card height */
   }
 
   * {
@@ -152,6 +162,7 @@ const canonical = Astro.url.href;
   .tag,
   .cat {
     display: inline-block;
+    align-self: flex-start; /* don't stretch when inside a flex-column card */
     background-color: var(--lime);
     color: var(--deep-moss);
     font-size: 0.5rem;
@@ -212,5 +223,26 @@ const canonical = Astro.url.href;
     color: var(--phosphor);
     line-height: 1.9;
     margin: 0 0 1.1rem;
+  }
+
+  /* Opt-in: vertically center the content between header and footer on desktop
+     (used by the homepage, whose bento fits one screen). Mobile stays top-aligned
+     and scrolls naturally. */
+  @media (min-width: 900px) {
+    body.centered .site-main {
+      display: flex;
+      flex-direction: column;
+    }
+    /* Empty spacers split the leftover space in a configurable ratio; they
+       collapse to 0 when the content is taller than the viewport (then it just
+       scrolls). Default 1:1 = centered; 1:3 sits the content ~25% from the top. */
+    body.centered .site-main::before {
+      content: "";
+      flex: var(--top-share, 1);
+    }
+    body.centered .site-main::after {
+      content: "";
+      flex: var(--bottom-share, 1);
+    }
   }
 </style>
