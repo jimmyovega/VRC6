@@ -7,9 +7,16 @@ import { getDb, schema } from "../../src/db";
 describe("articles data access (D1)", () => {
   beforeEach(async () => {
     const db = getDb(env.DB);
-    await db
-      .insert(schema.users)
-      .values({ username: "admin", email: "admin@vrc6.com", role: "admin", status: "active" });
+    await db.insert(schema.user).values({
+      id: "u-admin",
+      name: "Admin",
+      email: "admin@vrc6.com",
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      role: "admin",
+      status: "active",
+    });
     await db
       .insert(schema.categories)
       .values({ type: "events", slug: "events", label: "Events" });
@@ -17,7 +24,7 @@ describe("articles data access (D1)", () => {
 
   it("returns only published articles", async () => {
     const db = getDb(env.DB);
-    const [author] = await db.select().from(schema.users);
+    const [author] = await db.select().from(schema.user);
     const [category] = await db.select().from(schema.categories);
 
     await db.insert(schema.articles).values([
@@ -49,7 +56,7 @@ describe("articles data access (D1)", () => {
 
   it("enforces the unique slug constraint", async () => {
     const db = getDb(env.DB);
-    const [author] = await db.select().from(schema.users);
+    const [author] = await db.select().from(schema.user);
 
     await db
       .insert(schema.articles)

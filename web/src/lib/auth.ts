@@ -1,0 +1,46 @@
+// better-auth configured for Cloudflare Workers + D1 (Drizzle adapter).
+// The D1 binding is request-scoped, so the instance is created lazily and
+// memoized per isolate.
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { env } from "cloudflare:workers";
+import { getDb } from "../db";
+import { account, session, user, verification } from "../db/schema";
+
+// BETTER_AUTH_SECRET comes from .dev.vars locally / `wrangler secret put` in prod.
+const authEnv = env as typeof env & {
+  BETTER_AUTH_SECRET?: string;
+  BETTER_AUTH_URL?: string;
+};
+
+let cached: ReturnType<typeof betterAuth> | null = null;
+
+export function getAuth() {
+  if (cached) return cached;
+  const db = getDb(env.DB);
+  cached = betterAuth({
+    secret: authEnv.BETTER_AUTH_SECRET,
+    baseURL: authEnv.BETTER_AUTH_URL,
+    database: drizzleAdapter(db, {
+      provider: "sqlite",
+      schema: { user, session, account, verification },
+    }),
+    emailAndPassword: {
+      enabled: true,
+    },
+    user: {
+      additionalFields: {
+        role: { type: "string", required: false, defaultValue: "editor", input: false },
+        status: {
+          type: "string",
+          required: false,
+          defaultValue: "pending_activation",
+          input: false,
+        },
+        username: { type: "string", required: false },
+        bio: { type: "string", required: false },
+      },
+    },
+  });
+  return cached;
+}

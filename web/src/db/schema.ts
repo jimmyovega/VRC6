@@ -1,6 +1,9 @@
-// VRC6 database schema (Cloudflare D1 / SQLite) — ported from ../../datamodel.dbml
-// and enriched with the user/article state fields described in userworkflows.md and
-// articleworkflow.md. Drizzle ORM is the query layer.
+// VRC6 database schema (Cloudflare D1 / SQLite). Drizzle ORM is the query layer.
+//
+// Auth (M2): better-auth owns `user` / `session` / `account` / `verification`.
+// The Drizzle property keys must match better-auth's camelCase field names; the
+// SQL column names stay snake_case. `user` is extended with our app fields
+// (role, status, username, bio). App tables reference the text `user.id`.
 
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
@@ -27,7 +30,7 @@ export const CATEGORY_TYPES = [
   "photography",
 ] as const;
 
-// Reusable timestamp columns (epoch milliseconds).
+// Reusable app timestamp columns (epoch milliseconds).
 const createdAt = integer("created_at", { mode: "timestamp_ms" })
   .notNull()
   .default(sql`(unixepoch() * 1000)`);
@@ -35,28 +38,65 @@ const updatedAt = integer("updated_at", { mode: "timestamp_ms" })
   .notNull()
   .default(sql`(unixepoch() * 1000)`);
 
-// --- users ---
-export const users = sqliteTable("users", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  username: text("username").unique(),
+// ===================== better-auth tables =====================
+
+export const user = sqliteTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
   email: text("email").notNull().unique(),
-  fullName: text("full_name"),
-  bio: text("bio"),
+  emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
+  image: text("image"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  // --- extended app fields ---
   role: text("role", { enum: USER_ROLES }).notNull().default("editor"),
   status: text("status", { enum: USER_STATUSES }).notNull().default("pending_activation"),
-  // Auth — password hashing handled by the auth layer (M2); never store plaintext.
-  passwordHash: text("password_hash"),
-  // 2FA (M2)
-  totpSecret: text("totp_secret"),
-  createdAt,
-  updatedAt,
-  activatedAt: integer("activated_at", { mode: "timestamp_ms" }),
-  suspendedAt: integer("suspended_at", { mode: "timestamp_ms" }),
-  expiredAt: integer("expired_at", { mode: "timestamp_ms" }),
-  deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
+  username: text("username").unique(),
+  bio: text("bio"),
 });
 
-// --- categories ---
+export const session = sqliteTable("session", {
+  id: text("id").primaryKey(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  token: text("token").notNull().unique(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+});
+
+export const account = sqliteTable("account", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  idToken: text("id_token"),
+  accessTokenExpiresAt: integer("access_token_expires_at", { mode: "timestamp" }),
+  refreshTokenExpiresAt: integer("refresh_token_expires_at", { mode: "timestamp" }),
+  scope: text("scope"),
+  password: text("password"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+export const verification = sqliteTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }),
+  updatedAt: integer("updated_at", { mode: "timestamp" }),
+});
+
+// ===================== app tables =====================
+
 // dbml modeled this as just an enum `type`; we add slug + label for browsing/SEO (M1).
 export const categories = sqliteTable("categories", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -65,7 +105,6 @@ export const categories = sqliteTable("categories", {
   label: text("label").notNull(),
 });
 
-// --- articles ---
 // `body` holds the block-editor (BlockNote/TipTap) document as JSON (M3).
 export const articles = sqliteTable("articles", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -73,7 +112,7 @@ export const articles = sqliteTable("articles", {
   excerpt: text("excerpt"),
   body: text("body", { mode: "json" }),
   featuredImageKey: text("featured_image_key"), // R2 object key (M3)
-  authorId: integer("author_id").references(() => users.id),
+  authorId: text("author_id").references(() => user.id),
   categoryId: integer("category_id").references(() => categories.id),
   status: text("status", { enum: ARTICLE_STATUSES }).notNull().default("draft"),
   slug: text("slug").notNull().unique(),
@@ -83,30 +122,30 @@ export const articles = sqliteTable("articles", {
   publishedAt: integer("published_at", { mode: "timestamp_ms" }),
 });
 
-// --- tokens (activation / password reset / email change) ---
+// Activation / password reset / email change tokens (lifecycle work in Phase C).
 export const tokens = sqliteTable("tokens", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  userId: integer("user_id")
+  userId: text("user_id")
     .notNull()
-    .references(() => users.id),
+    .references(() => user.id),
   tokenHash: text("token_hash").notNull(),
   type: text("type", { enum: TOKEN_TYPES }).notNull(),
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
   createdAt,
 });
 
-// --- audits (append-only trail of user + article actions) ---
+// Append-only trail of user + article actions.
 export const audits = sqliteTable("audits", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  actorId: integer("actor_id").references(() => users.id),
+  actorId: text("actor_id").references(() => user.id),
   action: text("action").notNull(),
-  targetUserId: integer("target_user_id").references(() => users.id),
+  targetUserId: text("target_user_id").references(() => user.id),
   targetArticleId: integer("target_article_id").references(() => articles.id),
   details: text("details", { mode: "json" }),
   createdAt,
 });
 
 // Convenience types
-export type User = typeof users.$inferSelect;
+export type User = typeof user.$inferSelect;
 export type Article = typeof articles.$inferSelect;
 export type Category = typeof categories.$inferSelect;

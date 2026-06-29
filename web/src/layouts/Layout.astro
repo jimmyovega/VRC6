@@ -15,6 +15,7 @@ const {
   bottomShare = 1,
 } = Astro.props;
 const canonical = Astro.url.href;
+const user = Astro.locals.user;
 ---
 
 <!doctype html>
@@ -44,7 +45,18 @@ const canonical = Astro.url.href;
   >
     <header class="site-header">
       <a class="logo pixel" href="/">VRC6</a>
-      <a class="contact pixel" href="/contact">CONTACT US</a>
+      <nav class="header-nav">
+        <a class="contact pixel" href="/contact">CONTACT US</a>
+        {
+          user ? (
+            <button class="contact pixel" id="logout-btn" type="button">
+              LOG OUT
+            </button>
+          ) : (
+            <a class="contact pixel" href="/login">LOG IN</a>
+          )
+        }
+      </nav>
     </header>
 
     <main class="site-main">
@@ -54,6 +66,13 @@ const canonical = Astro.url.href;
     <footer class="site-footer">
       <p class="pixel">VRC6 © {new Date().getFullYear()} — ALTERNATE LIFESTYLE PUBLICATION</p>
     </footer>
+
+    <script>
+      document.getElementById("logout-btn")?.addEventListener("click", async () => {
+        await fetch("/api/auth/sign-out", { method: "POST" });
+        window.location.href = "/";
+      });
+    </script>
   </body>
 </html>
 
@@ -115,6 +134,15 @@ const canonical = Astro.url.href;
     text-decoration: none;
     border: 2px solid var(--phosphor);
     box-shadow: 3px 3px 0 var(--phosphor);
+  }
+  .header-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  button.contact {
+    cursor: pointer;
+    font-family: "Press Start 2P", monospace;
   }
   .site-main {
     flex: 1;
