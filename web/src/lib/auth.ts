@@ -6,6 +6,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { env } from "cloudflare:workers";
 import { getDb } from "../db";
 import { account, session, user, verification } from "../db/schema";
+import { sendEmail } from "./email";
 
 // BETTER_AUTH_SECRET comes from .dev.vars locally / `wrangler secret put` in prod.
 const authEnv = env as typeof env & {
@@ -28,6 +29,15 @@ export function getAuth() {
     }),
     emailAndPassword: {
       enabled: true,
+      minPasswordLength: 12,
+      sendResetPassword: async ({ user, url }) => {
+        await sendEmail({
+          to: user.email,
+          subject: "Reset your VRC6 password",
+          html: `<p>A password reset was requested for your VRC6 account.</p><p><a href="${url}">Reset your password</a></p><p>If this wasn't you, you can ignore this email.</p>`,
+          text: `Reset your VRC6 password: ${url}`,
+        });
+      },
     },
     databaseHooks: {
       user: {

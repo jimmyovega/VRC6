@@ -60,3 +60,15 @@ test("E2E-14 the bootstrap admin (ADMIN_EMAIL) can reach admin", async ({ page, 
   await page.goto("/admin");
   await expect(page.getByRole("heading", { level: 1, name: "Admin" })).toBeVisible();
 });
+
+test("E2E-15 forgot-password shows a confirmation after submit", async ({ page }) => {
+  await page.goto("/forgot-password");
+  await page.locator('input[name="email"]').fill("anyone@vrc6.com");
+  await page.getByRole("button", { name: "SEND RESET LINK" }).click();
+  await expect(page.getByText(/reset link is on its way/i)).toBeVisible();
+});
+
+test("E2E-16 reset-password without a token shows an error", async ({ page }) => {
+  await page.goto("/reset-password");
+  await expect(page.getByText(/Missing or invalid reset link/i)).toBeVisible();
+});

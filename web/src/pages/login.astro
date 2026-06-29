@@ -21,6 +21,7 @@ if (Astro.locals.user) {
       </label>
       <p class="error pixel" id="login-error" hidden>Invalid email or password.</p>
       <button class="btn pixel submit" type="submit">SIGN IN</button>
+      <a class="forgot-link pixel" href="/forgot-password">Forgot password?</a>
     </form>
   </div>
 </Layout>
@@ -89,5 +90,10 @@ if (Astro.locals.user) {
     text-align: center;
     cursor: pointer;
     margin-top: 0.25rem;
+  }
+  .forgot-link {
+    font-size: 0.5rem;
+    color: var(--lime);
+    text-align: center;
   }
 </style>
