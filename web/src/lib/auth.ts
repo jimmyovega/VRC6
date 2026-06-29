@@ -3,6 +3,7 @@
 // memoized per isolate.
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { getDb } from "../db";
 import { account, session, user, verification } from "../db/schema";
@@ -30,13 +31,25 @@ export function getAuth() {
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 12,
-      sendResetPassword: async ({ user, url }) => {
+      sendResetPassword: async ({ user: u, url }) => {
+        const inviting = (u as { status?: string }).status === "pending_activation";
         await sendEmail({
-          to: user.email,
-          subject: "Reset your VRC6 password",
-          html: `<p>A password reset was requested for your VRC6 account.</p><p><a href="${url}">Reset your password</a></p><p>If this wasn't you, you can ignore this email.</p>`,
-          text: `Reset your VRC6 password: ${url}`,
+          to: u.email,
+          subject: inviting ? "Activate your VRC6 account" : "Reset your VRC6 password",
+          html: inviting
+            ? `<p>You've been invited to VRC6. Set your password to activate your account:</p><p><a href="${url}">Activate account</a></p>`
+            : `<p>A password reset was requested for your VRC6 account.</p><p><a href="${url}">Reset your password</a></p><p>If this wasn't you, you can ignore this email.</p>`,
+          text: inviting
+            ? `Activate your VRC6 account: ${url}`
+            : `Reset your VRC6 password: ${url}`,
         });
+      },
+      onPasswordReset: async ({ user: u }) => {
+        // Activation: a pending user who has just set a password becomes active.
+        if ((u as { status?: string }).status === "pending_activation") {
+          const db = getDb(env.DB);
+          await db.update(user).set({ status: "active" }).where(eq(user.id, u.id));
+        }
       },
     },
     databaseHooks: {

@@ -9,23 +9,114 @@ const user = Astro.locals.user!;
   <div class="prose admin">
     <h1 class="page-title pixel">Admin</h1>
     <p>Welcome, <strong>{user.name}</strong>.</p>
-    <p class="muted">
-      User management — invite editors, suspend / reactivate, change roles — arrives
-      in Phase C.
-    </p>
-    <p>
-      <a class="btn pixel back-link" href="/dashboard">BACK TO DASHBOARD</a>
-    </p>
+
+    <h2 class="section pixel">INVITE A USER</h2>
+    <form id="invite-form" class="card invite-card">
+      <label class="field">
+        <span class="label pixel">EMAIL</span>
+        <input type="email" name="email" required autocomplete="off" />
+      </label>
+      <label class="field">
+        <span class="label pixel">NAME</span>
+        <input type="text" name="name" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span class="label pixel">ROLE</span>
+        <select name="role">
+          <option value="editor">Editor</option>
+          <option value="admin">Admin</option>
+        </select>
+      </label>
+      <p class="result pixel" id="invite-result" hidden></p>
+      <button class="btn pixel submit" type="submit">SEND INVITE</button>
+    </form>
+
+    <p class="muted">Suspend / reactivate / delete arrive in the next step.</p>
+    <p><a class="btn pixel back-link" href="/dashboard">BACK TO DASHBOARD</a></p>
   </div>
 </Layout>
+
+<script>
+  const form = document.getElementById("invite-form") as HTMLFormElement | null;
+  const result = document.getElementById("invite-result");
+  form?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const data = new FormData(form);
+    const res = await fetch("/api/admin/invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: data.get("email"),
+        name: data.get("name"),
+        role: data.get("role"),
+      }),
+    });
+    if (!result) return;
+    result.hidden = false;
+    if (res.ok) {
+      result.textContent = "Invite sent — they'll get an activation email.";
+      result.classList.remove("err");
+      form.reset();
+    } else {
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      result.textContent = j.error ?? "Could not send invite.";
+      result.classList.add("err");
+    }
+  });
+</script>
 
 <style>
   .admin {
     max-width: 640px;
     margin-inline: auto;
   }
+  .section {
+    font-size: 0.7rem;
+    color: var(--lime);
+    margin: 1.5rem 0 0.75rem;
+  }
+  .invite-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .field .label {
+    font-size: 0.5rem;
+    color: var(--lime);
+  }
+  .field input,
+  .field select {
+    background: var(--deep-moss);
+    border: 2px solid var(--lime);
+    color: var(--phosphor);
+    padding: 0.6rem;
+    font-family: inherit;
+    font-size: 0.95rem;
+  }
+  .field input:focus,
+  .field select:focus {
+    outline: none;
+    border-color: var(--phosphor);
+  }
+  .result {
+    font-size: 0.5rem;
+    color: var(--lime);
+    line-height: 1.6;
+    margin: 0;
+  }
+  .result.err {
+    color: #fca5a5;
+  }
+  .submit,
   .back-link {
     display: inline-block;
+    text-align: center;
+    cursor: pointer;
     text-decoration: none;
   }
 </style>

@@ -51,6 +51,7 @@ jobs:
         run: |
           echo "BETTER_AUTH_SECRET=ci-e2e-not-a-real-secret-0123456789abcdef0123456789" > .dev.vars
           echo "ADMIN_EMAIL=owner@vrc6.com" >> .dev.vars
+          echo "BETTER_AUTH_URL=http://localhost:8788" >> .dev.vars
 
       - name: Set up local D1 (build + migrate + seed)
         run: npm run e2e:setup

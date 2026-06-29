@@ -5,6 +5,7 @@ import { env } from "cloudflare:workers";
 const emailEnv = env as typeof env & {
   RESEND_API_KEY?: string;
   RESEND_FROM?: string;
+  EMAIL_DEBUG?: string;
 };
 
 // resend.dev works without a verified domain (only sends to the account owner);
@@ -18,10 +19,14 @@ export async function sendEmail(opts: {
   text?: string;
 }): Promise<{ ok: boolean; dev: boolean }> {
   const key = emailEnv.RESEND_API_KEY;
-  if (!key) {
+  // Log the email locally when there's no key, or when EMAIL_DEBUG is set (handy
+  // for grabbing activation/reset links during dev even while really sending).
+  if (!key || emailEnv.EMAIL_DEBUG) {
     console.log(
       `[email:dev] to=${opts.to} subject="${opts.subject}"\n${opts.text ?? opts.html}`,
     );
+  }
+  if (!key) {
     return { ok: true, dev: true };
   }
 

@@ -72,3 +72,12 @@ test("E2E-16 reset-password without a token shows an error", async ({ page }) =>
   await page.goto("/reset-password");
   await expect(page.getByText(/Missing or invalid reset link/i)).toBeVisible();
 });
+
+test("E2E-17 an admin can invite a user", async ({ page, request }) => {
+  await signUpAndLogin(page, request, "owner@vrc6.com");
+  await page.goto("/admin");
+  await page.locator('input[name="email"]').fill(`invitee-${Date.now()}@vrc6.com`);
+  await page.locator('input[name="name"]').fill("Invitee");
+  await page.getByRole("button", { name: "SEND INVITE" }).click();
+  await expect(page.getByText(/Invite sent/i)).toBeVisible();
+});
