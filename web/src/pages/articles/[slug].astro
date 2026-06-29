@@ -1,0 +1,313 @@
+---
+// Article detail page. Renders only published articles; anything else → themed 404.
+// Desktop: article text (left, scrolls) + sticky rail (right) with cover image,
+// reading progress, info panel, related reads, and share/support.
+// Mobile: cover image above the article, the rest of the rail below it.
+import { env } from "cloudflare:workers";
+import Breadcrumb from "../../components/Breadcrumb.astro";
+import Layout from "../../layouts/Layout.astro";
+import { getDb } from "../../db";
+import { getArticlesByCategory, getPublishedArticleBySlug } from "../../db/queries";
+import { readingTimeMinutes, renderBodyToHtml } from "../../lib/body";
+import { formatDate } from "../../lib/date";
+
+const { slug } = Astro.params;
+const db = getDb(env.DB);
+const article = slug ? await getPublishedArticleBySlug(db, slug) : null;
+
+if (!article) {
+  return Astro.rewrite("/404");
+}
+
+const bodyHtml = renderBodyToHtml(article.body);
+const byline = article.author ?? article.authorUsername ?? "VRC6";
+const dateLabel = formatDate(article.publishedAt);
+const minutes = readingTimeMinutes(article.body, article.excerpt);
+
+const related = article.categorySlug
+  ? (await getArticlesByCategory(db, article.categorySlug))
+      .filter((a) => a.slug !== article.slug)
+      .slice(0, 3)
+  : [];
+
+const infoRows: { k: string; v: string }[] = [];
+if (article.category) infoRows.push({ k: "Topic", v: article.category });
+if (dateLabel) infoRows.push({ k: "Published", v: dateLabel });
+infoRows.push({ k: "Read", v: `${minutes} min` });
+infoRows.push({ k: "By", v: byline });
+
+const shareUrl = Astro.url.href;
+const xUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(article.title)}&url=${encodeURIComponent(shareUrl)}`;
+const bskyUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(`${article.title} ${shareUrl}`)}`;
+---
+
+<Layout
+  center
+  topShare={1}
+  bottomShare={3}
+  title={`${article.title} — VRC6`}
+  description={article.excerpt ?? undefined}
+>
+  <div class="article-layout">
+    <article class="prose">
+      <Breadcrumb
+        items={[
+          { label: "Home", href: "/" },
+          ...(article.categorySlug
+            ? [
+                {
+                  label: article.category ?? "Category",
+                  href: `/category/${article.categorySlug}`,
+                },
+              ]
+            : []),
+        ]}
+      />
+      <h1 class="page-title pixel">{article.title}</h1>
+      <p class="byline pixel">By {byline}{dateLabel && ` · ${dateLabel}`}</p>
+      {article.excerpt && <p class="lead">{article.excerpt}</p>}
+      <div class="body" set:html={bodyHtml} />
+    </article>
+
+    <aside class="rail">
+      <div class="cover">
+        <div class="cover-img" role="img" aria-label="Cover image placeholder">
+          <span class="pixel">COVER</span>
+        </div>
+        <p class="cover-caption">Cover image · added in M3</p>
+      </div>
+
+      <div class="extras">
+        <div class="panel">
+          <span class="panel-label pixel">READING</span>
+          <div class="bar"><div class="bar-fill"></div></div>
+        </div>
+
+        <div class="panel">
+          <span class="panel-label pixel">INFO</span>
+          <dl class="info-list">
+            {
+              infoRows.map((row) => (
+                <div class="info-row">
+                  <dt>{row.k}</dt>
+                  <dd>{row.v}</dd>
+                </div>
+              ))
+            }
+          </dl>
+        </div>
+
+        {
+          related.length > 0 && (
+            <div class="panel">
+              <span class="panel-label pixel">
+                MORE IN {(article.category ?? "VRC6").toUpperCase()}
+              </span>
+              <ul class="related-list">
+                {related.map((r) => (
+                  <li>
+                    <a href={`/articles/${r.slug}`}>{r.title}</a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )
+        }
+
+        <div class="panel">
+          <span class="panel-label pixel">SHARE</span>
+          <div class="share-row">
+            <button class="chip pixel" type="button" data-copy aria-label="Copy link">COPY</button>
+            <a class="chip pixel" href={xUrl} target="_blank" rel="noopener noreferrer">X</a>
+            <a class="chip pixel" href={bskyUrl} target="_blank" rel="noopener noreferrer">BSKY</a>
+          </div>
+          <a class="btn pixel support-btn" href="/donate">SUPPORT VRC6</a>
+        </div>
+      </div>
+    </aside>
+  </div>
+</Layout>
+
+<script>
+  const fill = document.querySelector<HTMLElement>(".bar-fill");
+  const article = document.querySelector<HTMLElement>(".prose");
+  if (fill && article) {
+    const update = () => {
+      const rect = article.getBoundingClientRect();
+      const denom = rect.height - window.innerHeight;
+      const pct = denom <= 0 ? 100 : (Math.min(Math.max(-rect.top, 0), denom) / denom) * 100;
+      fill.style.width = `${Math.round(pct)}%`;
+    };
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    update();
+  }
+
+  const copyBtn = document.querySelector<HTMLButtonElement>("[data-copy]");
+  copyBtn?.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      const original = copyBtn.textContent;
+      copyBtn.textContent = "COPIED";
+      setTimeout(() => {
+        copyBtn.textContent = original;
+      }, 1500);
+    } catch {
+      // clipboard unavailable — ignore
+    }
+  });
+</script>
+
+<style>
+  .article-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .rail {
+    display: contents;
+  }
+  .cover {
+    order: -1;
+  }
+  .extras {
+    order: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .byline {
+    font-size: 0.5rem;
+    color: var(--lime);
+    margin: 0 0 1.5rem;
+  }
+  .lead {
+    font-size: 1.05rem;
+    color: var(--phosphor);
+    font-style: italic;
+    margin-bottom: 1.5rem;
+  }
+
+  .cover-img {
+    aspect-ratio: 4 / 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--forest);
+    border: 2px solid var(--lime);
+    box-shadow: 4px 4px 0 var(--phosphor);
+    color: var(--lime);
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+  }
+  .cover-caption {
+    margin: 0.6rem 0 0;
+    font-size: 0.85rem;
+    font-style: italic;
+    color: var(--lime);
+  }
+
+  .panel {
+    border: 2px solid var(--lime);
+    background: var(--forest);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+  }
+  .panel-label {
+    display: block;
+    font-size: 0.5rem;
+    color: var(--lime);
+    margin: 0 0 0.7rem;
+  }
+
+  .bar {
+    height: 14px;
+    background: var(--deep-moss);
+    border: 2px solid var(--lime);
+  }
+  .bar-fill {
+    height: 100%;
+    width: 0;
+    background: var(--lime);
+  }
+
+  .info-list {
+    margin: 0;
+  }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+    padding: 0.25rem 0;
+  }
+  .info-row dt {
+    color: var(--lime);
+    margin: 0;
+  }
+  .info-row dd {
+    color: var(--phosphor);
+    margin: 0;
+    text-align: right;
+  }
+
+  .related-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .related-list a {
+    display: block;
+    color: var(--phosphor);
+    text-decoration: none;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    padding: 0.45rem 0;
+    border-top: 1px solid rgba(74, 222, 128, 0.25);
+  }
+  .related-list li:first-child a {
+    border-top: none;
+  }
+  .related-list a:hover {
+    color: var(--lime);
+  }
+
+  .share-row {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+  .share-row .chip {
+    border: 0;
+    cursor: pointer;
+    font-size: 0.5rem;
+  }
+  .support-btn {
+    display: block;
+    text-align: center;
+    margin-top: 0.8rem;
+  }
+
+  /* Desktop: text column + sticky rail (cover + extras together). */
+  @media (min-width: 900px) {
+    .article-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 300px;
+      gap: 2.5rem;
+      align-items: start;
+      max-width: 1040px;
+      margin-inline: auto;
+    }
+    .article-layout .prose {
+      max-width: none;
+    }
+    .rail {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      position: sticky;
+      top: 1.5rem;
+    }
+  }
+</style>

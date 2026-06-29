@@ -21,6 +21,9 @@ export default defineWorkersConfig(async () => {
 
   return {
     test: {
+      // Only vitest unit/integration tests live in test/. Playwright E2E specs
+      // live in e2e/ and must NOT be picked up by vitest.
+      include: ["test/**/*.test.ts"],
       setupFiles: ["./test/apply-migrations.ts"],
       poolOptions: {
         workers: {

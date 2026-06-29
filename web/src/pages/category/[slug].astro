@@ -1,0 +1,57 @@
+---
+// Category browse page. Lists published articles in the category; unknown → themed 404.
+import { env } from "cloudflare:workers";
+import ArticleCard from "../../components/ArticleCard.astro";
+import Breadcrumb from "../../components/Breadcrumb.astro";
+import Layout from "../../layouts/Layout.astro";
+import { getDb } from "../../db";
+import { getArticlesByCategory, getCategoryBySlug } from "../../db/queries";
+
+const { slug } = Astro.params;
+const db = getDb(env.DB);
+const category = slug ? await getCategoryBySlug(db, slug) : null;
+
+if (!category) {
+  return Astro.rewrite("/404");
+}
+
+const articles = await getArticlesByCategory(db, category.slug);
+---
+
+<Layout
+  title={`${category.label} — VRC6`}
+  description={`Articles in ${category.label} on VRC6.`}
+>
+  <Breadcrumb items={[{ label: "Home", href: "/" }, { label: category.label }]} />
+  <h1 class="page-title pixel">{category.label}</h1>
+
+  {
+    articles.length === 0 ? (
+      <p class="muted">No published articles in this category yet.</p>
+    ) : (
+      <div class="card-grid">
+        {articles.map((a) => (
+          <ArticleCard
+            title={a.title}
+            excerpt={a.excerpt}
+            slug={a.slug}
+            category={a.category}
+          />
+        ))}
+      </div>
+    )
+  }
+</Layout>
+
+<style>
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  @media (min-width: 700px) {
+    .card-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+</style>
