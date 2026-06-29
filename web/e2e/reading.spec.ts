@@ -61,3 +61,18 @@ test("E2E-07 home feed paginates client-side without a reload", async ({ page })
   await expect(page.getByText(/^2 \/ \d+$/)).toBeVisible();
   await expect(pageTwoItem).toBeVisible();
 });
+
+test("E2E-08 sitemap.xml lists published articles", async ({ page }) => {
+  const res = await page.goto("/sitemap.xml");
+  expect(res?.status()).toBe(200);
+  const body = (await res?.text()) ?? "";
+  expect(body).toContain("<urlset");
+  expect(body).toContain("/articles/against-the-algorithm");
+});
+
+test("E2E-09 robots.txt points to the sitemap", async ({ page }) => {
+  const res = await page.goto("/robots.txt");
+  expect(res?.status()).toBe(200);
+  const body = (await res?.text()) ?? "";
+  expect(body).toMatch(/Sitemap:\s*https?:\/\/.*\/sitemap\.xml/);
+});
