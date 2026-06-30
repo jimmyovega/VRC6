@@ -1,0 +1,35 @@
+# Copy this file to `.dev.vars` (gitignored) and fill in values for local dev.
+# In production, set secrets with `wrangler secret put <NAME>` and non-secrets as
+# `vars` in wrangler.jsonc. Do NOT set the dev-only *_DISABLED / EMAIL_DEBUG flags in prod.
+
+# --- better-auth (required) ---
+# A long random string. Generate one, e.g. `openssl rand -hex 32`.
+BETTER_AUTH_SECRET=replace-with-a-long-random-string
+# Base URL used to build absolute links in server-sent emails.
+# Dev: http://localhost:8788   Prod: https://your-domain
+BETTER_AUTH_URL=http://localhost:8788
+# Comma-separated emails that become active admins on sign-up.
+ADMIN_EMAIL=you@example.com
+
+# --- Email (Resend) ---
+# Optional in dev: with EMAIL_DEBUG=1 (or no key) emails are logged, not sent.
+RESEND_API_KEY=
+# Verified sender for production (a domain verified at resend.com/domains).
+# RESEND_FROM=VRC6 <noreply@your-domain>
+EMAIL_DEBUG=1
+
+# --- Cloudflare Turnstile ---
+# Public site key (safe to commit/expose). Dev falls back to the always-pass test key.
+TURNSTILE_SITE_KEY=
+# Secret key for server-side siteverify (treat as a secret).
+TURNSTILE_SECRET_KEY=
+# Set to 1 to bypass Turnstile verification locally / in CI.
+TURNSTILE_DISABLED=1
+
+# --- Rate limiting ---
+# Set to 1 to bypass the auth rate limiter locally / in CI.
+RATE_LIMIT_DISABLED=1
+
+# --- Activation expiry (optional) ---
+# Days a pending invite stays valid before the cron sweep expires it (default 7).
+# ACTIVATION_TTL_DAYS=7
