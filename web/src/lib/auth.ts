@@ -17,6 +17,7 @@ import {
 } from "../db/schema";
 import { sendEmail } from "./email";
 import { verifyTurnstile } from "./turnstile";
+import { RATE_LIMITS, consumeRateLimit, rateLimitDisabled } from "./rate-limit";
 
 // Public auth endpoints (paths relative to /api/auth) gated by Turnstile.
 const TURNSTILE_GUARDED_PATHS = new Set(["/sign-in/email", "/request-password-reset"]);
@@ -43,13 +44,36 @@ export function getAuth() {
       // sent in the `x-turnstile-token` header so it doesn't collide with the
       // better-auth request body schema.
       before: createAuthMiddleware(async (ctx) => {
-        if (!TURNSTILE_GUARDED_PATHS.has(ctx.path)) return;
-        const token = ctx.headers?.get("x-turnstile-token");
-        const ip = ctx.headers?.get("cf-connecting-ip") ?? undefined;
-        if (!(await verifyTurnstile(token, ip))) {
-          throw new APIError("FORBIDDEN", {
-            message: "Verification failed. Please try again.",
-          });
+        const ip =
+          ctx.headers?.get("cf-connecting-ip") ??
+          ctx.headers?.get("x-forwarded-for") ??
+          "unknown";
+
+        // Rate limit the sensitive endpoints (defense-in-depth; D1-backed).
+        const rule = RATE_LIMITS[ctx.path];
+        if (rule && !rateLimitDisabled()) {
+          const { allowed, retryAfter } = await consumeRateLimit(
+            getDb(env.DB),
+            `${ip}:${ctx.path}`,
+            rule.max,
+            rule.windowMs,
+          );
+          if (!allowed) {
+            throw new APIError("TOO_MANY_REQUESTS", {
+              message: "Too many attempts. Please wait a moment and try again.",
+              retryAfter,
+            });
+          }
+        }
+
+        // Turnstile on the public auth forms.
+        if (TURNSTILE_GUARDED_PATHS.has(ctx.path)) {
+          const token = ctx.headers?.get("x-turnstile-token");
+          if (!(await verifyTurnstile(token, ip === "unknown" ? undefined : ip))) {
+            throw new APIError("FORBIDDEN", {
+              message: "Verification failed. Please try again.",
+            });
+          }
         }
       }),
     },

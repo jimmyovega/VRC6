@@ -156,6 +156,14 @@ export const tokens = sqliteTable("tokens", {
   createdAt,
 });
 
+// Fixed-window rate-limit counters for auth endpoints (M2 Phase D3).
+// Keyed by `${ip}:${path}`; `resetAt` is when the current window expires.
+export const authRateLimit = sqliteTable("auth_rate_limit", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull().default(0),
+  resetAt: integer("reset_at", { mode: "timestamp_ms" }).notNull(),
+});
+
 // Append-only trail of user + article actions.
 export const audits = sqliteTable("audits", {
   id: integer("id").primaryKey({ autoIncrement: true }),
