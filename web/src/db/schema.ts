@@ -53,11 +53,28 @@ export const user = sqliteTable("user", {
   status: text("status", { enum: USER_STATUSES }).notNull().default("pending_activation"),
   username: text("username").unique(),
   bio: text("bio"),
+  // TOTP 2FA (M2 Phase D2) — managed by the better-auth twoFactor plugin.
+  twoFactorEnabled: integer("two_factor_enabled", { mode: "boolean" })
+    .notNull()
+    .default(false),
   // lifecycle timestamps (M2 Phase C)
   activatedAt: integer("activated_at", { mode: "timestamp" }),
   suspendedAt: integer("suspended_at", { mode: "timestamp" }),
   expiredAt: integer("expired_at", { mode: "timestamp" }),
   deletedAt: integer("deleted_at", { mode: "timestamp" }),
+});
+
+// TOTP secret + backup codes for 2FA (better-auth twoFactor plugin owns this).
+export const twoFactor = sqliteTable("two_factor", {
+  id: text("id").primaryKey(),
+  secret: text("secret").notNull(),
+  backupCodes: text("backup_codes").notNull(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  verified: integer("verified", { mode: "boolean" }).notNull().default(true),
+  failedVerificationCount: integer("failed_verification_count").notNull().default(0),
+  lockedUntil: integer("locked_until", { mode: "timestamp" }),
 });
 
 export const session = sqliteTable("session", {

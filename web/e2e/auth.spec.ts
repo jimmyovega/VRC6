@@ -1,4 +1,7 @@
 import { expect, test } from "@playwright/test";
+import { generateSync } from "otplib";
+
+const totp = (secret: string) => generateSync({ strategy: "totp", secret });
 
 // Auth foundation (M2 Phase A) — against wrangler dev + better-auth on D1.
 
@@ -155,4 +158,54 @@ test("E2E-21 the Turnstile widget renders on the public auth forms", async ({ pa
   await expect(page.locator(".cf-turnstile")).toBeAttached();
   await page.goto("/forgot-password");
   await expect(page.locator(".cf-turnstile")).toBeAttached();
+});
+
+test("E2E-22 a user can enable TOTP 2FA and is challenged for it at login", async ({
+  playwright,
+}) => {
+  const email = `twofa-${Date.now()}@vrc6.com`;
+  const password = "Sup3rSecret!23";
+  const ctx = await playwright.request.newContext({
+    baseURL: "http://localhost:8788",
+    extraHTTPHeaders: { Origin: "http://localhost:8788" },
+  });
+
+  // Sign up (auto-logged-in, active).
+  expect((await ctx.post("/api/auth/sign-up/email", { data: { email, password, name: "TwoFA" } })).ok()).toBeTruthy();
+
+  // Enable 2FA → returns the TOTP URI + backup codes.
+  const enable = await ctx.post("/api/auth/two-factor/enable", { data: { password } });
+  expect(enable.ok()).toBeTruthy();
+  const { totpURI, backupCodes } = (await enable.json()) as { totpURI: string; backupCodes: string[] };
+  expect(backupCodes.length).toBeGreaterThan(0);
+  const secret = new URL(totpURI).searchParams.get("secret")!;
+  expect(secret).toBeTruthy();
+
+  // Confirm enrolment with a generated code.
+  expect((await ctx.post("/api/auth/two-factor/verify-totp", { data: { code: totp(secret) } })).ok()).toBeTruthy();
+
+  // Sign out, then sign back in — 2FA is now required (no full session yet).
+  await ctx.post("/api/auth/sign-out");
+  const signin = await ctx.post("/api/auth/sign-in/email", { data: { email, password } });
+  expect(signin.ok()).toBeTruthy();
+  const signinBody = (await signin.json()) as { twoFactorRedirect?: boolean; token?: string };
+  expect(signinBody.twoFactorRedirect).toBe(true);
+  expect(signinBody.token).toBeFalsy();
+
+  // Complete login with a fresh code.
+  expect((await ctx.post("/api/auth/two-factor/verify-totp", { data: { code: totp(secret) } })).ok()).toBeTruthy();
+
+  // The session is now established.
+  const sess = await ctx.get("/api/auth/get-session");
+  const sessBody = (await sess.json()) as { user?: { email?: string } } | null;
+  expect(sessBody?.user?.email).toBe(email);
+
+  await ctx.dispose();
+});
+
+test("E2E-23 the security page exposes 2FA enrolment", async ({ page, request }) => {
+  await signUpAndLogin(page, request, `sec-${Date.now()}@vrc6.com`);
+  await page.goto("/dashboard/security");
+  await expect(page.getByRole("heading", { level: 1, name: "Security" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "ENABLE 2FA" })).toBeVisible();
 });

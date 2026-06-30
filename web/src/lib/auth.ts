@@ -4,10 +4,17 @@
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { twoFactor } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import { getDb } from "../db";
-import { account, session, user, verification } from "../db/schema";
+import {
+  account,
+  session,
+  twoFactor as twoFactorTable,
+  user,
+  verification,
+} from "../db/schema";
 import { sendEmail } from "./email";
 import { verifyTurnstile } from "./turnstile";
 
@@ -27,8 +34,10 @@ export function getAuth() {
   if (cached) return cached;
   const db = getDb(env.DB);
   cached = betterAuth({
+    appName: "VRC6",
     secret: authEnv.BETTER_AUTH_SECRET,
     baseURL: authEnv.BETTER_AUTH_URL,
+    plugins: [twoFactor({ issuer: "VRC6" })],
     hooks: {
       // Gate the public auth forms with Cloudflare Turnstile. The token is
       // sent in the `x-turnstile-token` header so it doesn't collide with the
@@ -46,7 +55,7 @@ export function getAuth() {
     },
     database: drizzleAdapter(db, {
       provider: "sqlite",
-      schema: { user, session, account, verification },
+      schema: { user, session, account, verification, twoFactor: twoFactorTable },
     }),
     emailAndPassword: {
       enabled: true,

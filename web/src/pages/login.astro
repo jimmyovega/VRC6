@@ -26,6 +26,16 @@ const siteKey = getTurnstileSiteKey();
       <button class="btn pixel submit" type="submit">SIGN IN</button>
       <a class="forgot-link pixel" href="/forgot-password">Forgot password?</a>
     </form>
+
+    <form id="twofa-form" class="card login-card" hidden>
+      <p class="hint pixel">Enter the 6-digit code from your authenticator app.</p>
+      <label class="field">
+        <span class="label pixel">CODE</span>
+        <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" />
+      </label>
+      <p class="error pixel" id="twofa-error" hidden>Invalid code.</p>
+      <button class="btn pixel submit" type="submit">VERIFY</button>
+    </form>
   </div>
 </Layout>
 
@@ -50,9 +60,36 @@ const siteKey = getTurnstileSiteKey();
       }),
     });
     if (res.ok) {
-      window.location.href = "/";
+      const body = (await res.json().catch(() => ({}))) as { twoFactorRedirect?: boolean };
+      if (body.twoFactorRedirect) {
+        // 2FA is on — swap to the code step instead of going home.
+        form.hidden = true;
+        twofaForm?.removeAttribute("hidden");
+        twofaForm?.querySelector("input")?.focus();
+      } else {
+        window.location.href = "/";
+      }
     } else if (err) {
       err.hidden = false;
+    }
+  });
+
+  const twofaForm = document.getElementById("twofa-form") as HTMLFormElement | null;
+  const twofaErr = document.getElementById("twofa-error");
+  twofaForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (twofaErr) twofaErr.hidden = true;
+    const code = String(new FormData(twofaForm).get("code") ?? "").trim();
+    const res = await fetch("/api/auth/two-factor/verify-totp", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+    const ok = res.ok && ((await res.json().catch(() => ({}))) as { status?: boolean }).status !== false;
+    if (ok) {
+      window.location.href = "/";
+    } else if (twofaErr) {
+      twofaErr.hidden = false;
     }
   });
 </script>
@@ -92,6 +129,12 @@ const siteKey = getTurnstileSiteKey();
   .error {
     color: #fca5a5;
     font-size: 0.5rem;
+    margin: 0;
+  }
+  .hint {
+    color: var(--lime);
+    font-size: 0.5rem;
+    line-height: 1.6;
     margin: 0;
   }
   .submit {
