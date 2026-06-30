@@ -81,3 +81,37 @@ test("E2E-17 an admin can invite a user", async ({ page, request }) => {
   await page.getByRole("button", { name: "SEND INVITE" }).click();
   await expect(page.getByText(/Invite sent/i)).toBeVisible();
 });
+
+test("E2E-18 an admin can suspend a user, blocking their login", async ({
+  page,
+  request,
+  playwright,
+}) => {
+  const email = `suspendme-${Date.now()}@vrc6.com`;
+  const password = "Sup3rSecret!23";
+
+  // Create an active editor in an isolated context; capture their id.
+  // better-auth's CSRF check rejects cookie-bearing requests without an Origin
+  // header (real browsers always send one; API request contexts don't).
+  const editorCtx = await playwright.request.newContext({
+    baseURL: "http://localhost:8788",
+    extraHTTPHeaders: { Origin: "http://localhost:8788" },
+  });
+  const signup = await editorCtx.post("/api/auth/sign-up/email", {
+    data: { email, password, name: "Suspend Me" },
+  });
+  const created = (await signup.json()) as { user: { id: string } };
+  // They can log in initially.
+  expect((await editorCtx.post("/api/auth/sign-in/email", { data: { email, password } })).status()).toBe(200);
+
+  // Admin suspends them.
+  await signUpAndLogin(page, request, "owner@vrc6.com");
+  const suspend = await page.request.post("/api/admin/user-action", {
+    data: { userId: created.user.id, action: "suspend" },
+  });
+  expect(suspend.ok()).toBeTruthy();
+
+  // Login is now blocked.
+  expect((await editorCtx.post("/api/auth/sign-in/email", { data: { email, password } })).status()).not.toBe(200);
+  await editorCtx.dispose();
+});

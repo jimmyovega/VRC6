@@ -1,14 +1,27 @@
 ---
+import { env } from "cloudflare:workers";
 import Layout from "../../layouts/Layout.astro";
+import { getDb, schema } from "../../db";
 
 // Admin-only — enforced in middleware.
-const user = Astro.locals.user!;
+const me = Astro.locals.user!;
+const db = getDb(env.DB);
+const users = await db
+  .select({
+    id: schema.user.id,
+    name: schema.user.name,
+    email: schema.user.email,
+    role: schema.user.role,
+    status: schema.user.status,
+  })
+  .from(schema.user)
+  .orderBy(schema.user.email);
 ---
 
 <Layout center topShare={1} bottomShare={3} title="Admin — VRC6">
   <div class="prose admin">
     <h1 class="page-title pixel">Admin</h1>
-    <p>Welcome, <strong>{user.name}</strong>.</p>
+    <p>Welcome, <strong>{me.name}</strong>.</p>
 
     <h2 class="section pixel">INVITE A USER</h2>
     <form id="invite-form" class="card invite-card">
@@ -31,17 +44,63 @@ const user = Astro.locals.user!;
       <button class="btn pixel submit" type="submit">SEND INVITE</button>
     </form>
 
-    <p class="muted">Suspend / reactivate / delete arrive in the next step.</p>
+    <h2 class="section pixel">USERS</h2>
+    <div class="users">
+      {
+        users.map((u) => (
+          <div class="user-row card">
+            <div class="u-meta">
+              <span class="u-name">{u.name}</span>
+              <span class="u-email">{u.email}</span>
+            </div>
+            <div class="u-tags pixel">
+              <span class={`tagpill role-${u.role}`}>{u.role.toUpperCase()}</span>
+              <span class={`tagpill st-${u.status}`}>
+                {u.status.replace(/_/g, " ").toUpperCase()}
+              </span>
+            </div>
+            <div class="u-actions">
+              {u.status === "suspended" ? (
+                <button class="u-act pixel" data-id={u.id} data-action="reactivate">
+                  REACTIVATE
+                </button>
+              ) : (
+                u.status !== "deleted" && (
+                  <button class="u-act pixel" data-id={u.id} data-action="suspend">
+                    SUSPEND
+                  </button>
+                )
+              )}
+              <button
+                class="u-act pixel"
+                data-id={u.id}
+                data-action="setRole"
+                data-role={u.role === "admin" ? "editor" : "admin"}
+              >
+                {u.role === "admin" ? "MAKE EDITOR" : "MAKE ADMIN"}
+              </button>
+              {u.status !== "deleted" && (
+                <button class="u-act danger pixel" data-id={u.id} data-action="delete">
+                  DELETE
+                </button>
+              )}
+            </div>
+          </div>
+        ))
+      }
+    </div>
+
+    <p class="muted">Cron activation-expiry + an audit view arrive next.</p>
     <p><a class="btn pixel back-link" href="/dashboard">BACK TO DASHBOARD</a></p>
   </div>
 </Layout>
 
 <script>
-  const form = document.getElementById("invite-form") as HTMLFormElement | null;
-  const result = document.getElementById("invite-result");
-  form?.addEventListener("submit", async (e) => {
+  const inviteForm = document.getElementById("invite-form") as HTMLFormElement | null;
+  const inviteResult = document.getElementById("invite-result");
+  inviteForm?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const data = new FormData(form);
+    const data = new FormData(inviteForm);
     const res = await fetch("/api/admin/invite", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -51,29 +110,51 @@ const user = Astro.locals.user!;
         role: data.get("role"),
       }),
     });
-    if (!result) return;
-    result.hidden = false;
+    if (!inviteResult) return;
+    inviteResult.hidden = false;
     if (res.ok) {
-      result.textContent = "Invite sent — they'll get an activation email.";
-      result.classList.remove("err");
-      form.reset();
+      inviteResult.textContent = "Invite sent — they'll get an activation email.";
+      inviteResult.classList.remove("err");
+      inviteForm.reset();
     } else {
       const j = (await res.json().catch(() => ({}))) as { error?: string };
-      result.textContent = j.error ?? "Could not send invite.";
-      result.classList.add("err");
+      inviteResult.textContent = j.error ?? "Could not send invite.";
+      inviteResult.classList.add("err");
     }
+  });
+
+  document.querySelectorAll<HTMLButtonElement>(".u-act").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const action = btn.dataset.action;
+      if (action === "delete" && !confirm("Delete this user?")) return;
+      const res = await fetch("/api/admin/user-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: btn.dataset.id,
+          action,
+          role: btn.dataset.role,
+        }),
+      });
+      if (res.ok) {
+        location.reload();
+      } else {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        alert(j.error ?? "Action failed.");
+      }
+    });
   });
 </script>
 
 <style>
   .admin {
-    max-width: 640px;
+    max-width: 720px;
     margin-inline: auto;
   }
   .section {
     font-size: 0.7rem;
     color: var(--lime);
-    margin: 1.5rem 0 0.75rem;
+    margin: 1.75rem 0 0.75rem;
   }
   .invite-card {
     display: flex;
@@ -106,11 +187,70 @@ const user = Astro.locals.user!;
   .result {
     font-size: 0.5rem;
     color: var(--lime);
-    line-height: 1.6;
     margin: 0;
   }
   .result.err {
     color: #fca5a5;
+  }
+
+  .users {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .user-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+  }
+  .u-meta {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 180px;
+    min-width: 0;
+  }
+  .u-name {
+    color: var(--phosphor);
+  }
+  .u-email {
+    color: var(--lime);
+    font-size: 0.8rem;
+  }
+  .u-tags {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .tagpill {
+    font-size: 0.4rem;
+    padding: 0.3rem 0.45rem;
+    background: var(--deep-moss);
+    color: var(--phosphor);
+    border: 1px solid var(--lime);
+  }
+  .st-suspended,
+  .st-deleted {
+    color: #fca5a5;
+    border-color: #fca5a5;
+  }
+  .u-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .u-act {
+    font-size: 0.4rem;
+    padding: 0.4rem 0.55rem;
+    background: var(--lime);
+    color: var(--deep-moss);
+    border: 2px solid var(--phosphor);
+    cursor: pointer;
+  }
+  .u-act.danger {
+    background: var(--deep-moss);
+    color: #fca5a5;
+    border-color: #fca5a5;
   }
   .submit,
   .back-link {

@@ -46,10 +46,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ error: "That email is already invited or registered." }, 409);
   }
 
-  // signUpEmail defaults role=editor / status=pending_activation; set admin if asked.
-  if (role === "admin") {
-    await db.update(schema.user).set({ role }).where(eq(schema.user.email, email));
-  }
+  // New sign-ups default to active; an invited user must activate first.
+  await db
+    .update(schema.user)
+    .set({ role, status: "pending_activation" })
+    .where(eq(schema.user.email, email));
 
   // Send the activation (set-password) email. Pass the request headers so
   // better-auth derives the origin and builds an absolute activation URL.

@@ -53,6 +53,11 @@ export const user = sqliteTable("user", {
   status: text("status", { enum: USER_STATUSES }).notNull().default("pending_activation"),
   username: text("username").unique(),
   bio: text("bio"),
+  // lifecycle timestamps (M2 Phase C)
+  activatedAt: integer("activated_at", { mode: "timestamp" }),
+  suspendedAt: integer("suspended_at", { mode: "timestamp" }),
+  expiredAt: integer("expired_at", { mode: "timestamp" }),
+  deletedAt: integer("deleted_at", { mode: "timestamp" }),
 });
 
 export const session = sqliteTable("session", {

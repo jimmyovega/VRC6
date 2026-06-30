@@ -2,6 +2,7 @@
 // The D1 binding is request-scoped, so the instance is created lazily and
 // memoized per isolate.
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
@@ -48,19 +49,48 @@ export function getAuth() {
         // Activation: a pending user who has just set a password becomes active.
         if ((u as { status?: string }).status === "pending_activation") {
           const db = getDb(env.DB);
-          await db.update(user).set({ status: "active" }).where(eq(user.id, u.id));
+          await db
+            .update(user)
+            .set({ status: "active", activatedAt: new Date() })
+            .where(eq(user.id, u.id));
         }
       },
     },
     databaseHooks: {
       user: {
         create: {
-          // Bootstrap: the configured owner email becomes an active admin on sign-up.
+          // New sign-ups are active (so they can log in); the invite endpoint
+          // overrides invited users back to pending_activation afterward. Any
+          // email in ADMIN_EMAIL (comma-separated) is also made an admin.
           before: async (newUser) => {
-            if (authEnv.ADMIN_EMAIL && newUser.email === authEnv.ADMIN_EMAIL) {
-              return { data: { ...newUser, role: "admin", status: "active" } };
+            const admins = (authEnv.ADMIN_EMAIL ?? "")
+              .split(",")
+              .map((s) => s.trim().toLowerCase())
+              .filter(Boolean);
+            const isAdmin = admins.includes(newUser.email.toLowerCase());
+            return {
+              data: { ...newUser, status: "active", ...(isAdmin ? { role: "admin" } : {}) },
+            };
+          },
+        },
+      },
+      session: {
+        create: {
+          // Only active accounts may hold a session (blocks pending / suspended /
+          // expired / deleted from logging in).
+          before: async (newSession) => {
+            const db = getDb(env.DB);
+            const [u] = await db
+              .select({ status: user.status })
+              .from(user)
+              .where(eq(user.id, newSession.userId))
+              .limit(1);
+            if (u && u.status !== "active") {
+              throw new APIError("FORBIDDEN", {
+                message: "This account is not active.",
+              });
             }
-            return { data: newUser };
+            return { data: newSession };
           },
         },
       },
@@ -71,7 +101,7 @@ export function getAuth() {
         status: {
           type: "string",
           required: false,
-          defaultValue: "pending_activation",
+          defaultValue: "active",
           input: false,
         },
         username: { type: "string", required: false },

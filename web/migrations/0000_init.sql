@@ -90,7 +90,11 @@ CREATE TABLE `user` (
 	`role` text DEFAULT 'editor' NOT NULL,
 	`status` text DEFAULT 'pending_activation' NOT NULL,
 	`username` text,
-	`bio` text
+	`bio` text,
+	`activated_at` integer,
+	`suspended_at` integer,
+	`expired_at` integer,
+	`deleted_at` integer
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `user_email_unique` ON `user` (`email`);--> statement-breakpoint
