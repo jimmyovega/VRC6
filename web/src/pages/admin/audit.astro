@@ -1,0 +1,111 @@
+---
+import { env } from "cloudflare:workers";
+import { alias } from "drizzle-orm/sqlite-core";
+import { desc, eq } from "drizzle-orm";
+import Layout from "../../layouts/Layout.astro";
+import { getDb, schema } from "../../db";
+
+// Admin-only — enforced in middleware.
+const db = getDb(env.DB);
+const actor = alias(schema.user, "actor");
+const target = alias(schema.user, "target");
+const rows = await db
+  .select({
+    id: schema.audits.id,
+    action: schema.audits.action,
+    details: schema.audits.details,
+    createdAt: schema.audits.createdAt,
+    actorEmail: actor.email,
+    targetEmail: target.email,
+  })
+  .from(schema.audits)
+  .leftJoin(actor, eq(schema.audits.actorId, actor.id))
+  .leftJoin(target, eq(schema.audits.targetUserId, target.id))
+  .orderBy(desc(schema.audits.createdAt))
+  .limit(100);
+
+const fmt = (d: Date | null) =>
+  d ? new Date(d).toISOString().replace("T", " ").slice(0, 19) + "Z" : "";
+const detailsOf = (d: unknown) =>
+  d && Object.keys(d as object).length ? JSON.stringify(d) : "";
+---
+
+<Layout center topShare={1} bottomShare={3} title="Audit log — VRC6">
+  <div class="prose audit">
+    <h1 class="page-title pixel">Audit log</h1>
+    <p class="muted">Most recent {rows.length} actions.</p>
+
+    {
+      rows.length === 0 ? (
+        <p class="empty">No audit entries yet.</p>
+      ) : (
+        <div class="log">
+          {rows.map((r) => (
+            <div class="entry card">
+              <span class="when pixel">{fmt(r.createdAt)}</span>
+              <span class="action pixel">{r.action}</span>
+              <span class="who">
+                {r.actorEmail ?? "system"}
+                {r.targetEmail ? ` → ${r.targetEmail}` : ""}
+              </span>
+              {detailsOf(r.details) && (
+                <span class="details">{detailsOf(r.details)}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )
+    }
+
+    <p><a class="btn pixel back-link" href="/admin">BACK TO ADMIN</a></p>
+  </div>
+</Layout>
+
+<style>
+  .audit {
+    max-width: 760px;
+    margin-inline: auto;
+  }
+  .log {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .entry {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: baseline;
+    gap: 0.6rem 0.85rem;
+    padding: 0.6rem 0.85rem;
+  }
+  .when {
+    font-size: 0.45rem;
+    color: var(--lime);
+    white-space: nowrap;
+  }
+  .action {
+    font-size: 0.5rem;
+    color: var(--phosphor);
+    white-space: nowrap;
+  }
+  .who {
+    color: var(--phosphor);
+    font-size: 0.85rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .details {
+    grid-column: 3;
+    color: var(--lime);
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+  }
+  .empty {
+    color: var(--lime);
+  }
+  .back-link {
+    display: inline-block;
+    text-decoration: none;
+    cursor: pointer;
+  }
+</style>

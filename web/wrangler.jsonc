@@ -3,7 +3,11 @@
 	"compatibility_date": "2026-06-26",
 	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
 	"name": "vrc6",
-	"main": "@astrojs/cloudflare/entrypoints/server",
+	"main": "src/worker.ts",
+	"triggers": {
+		// Daily at 08:00 UTC — expire stale pending activations (M2 Phase C4).
+		"crons": ["0 8 * * *"]
+	},
 	"assets": {
 		"directory": "./dist",
 		"binding": "ASSETS"

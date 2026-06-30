@@ -115,3 +115,37 @@ test("E2E-18 an admin can suspend a user, blocking their login", async ({
   expect((await editorCtx.post("/api/auth/sign-in/email", { data: { email, password } })).status()).not.toBe(200);
   await editorCtx.dispose();
 });
+
+test("E2E-19 the audit log records admin actions", async ({ page, request, playwright }) => {
+  const email = `audit-target-${Date.now()}@vrc6.com`;
+  const ctx = await playwright.request.newContext({
+    baseURL: "http://localhost:8788",
+    extraHTTPHeaders: { Origin: "http://localhost:8788" },
+  });
+  const signup = await ctx.post("/api/auth/sign-up/email", {
+    data: { email, password: "Sup3rSecret!23", name: "Audit Target" },
+  });
+  const created = (await signup.json()) as { user: { id: string } };
+  await ctx.dispose();
+
+  await signUpAndLogin(page, request, "owner@vrc6.com");
+  const suspend = await page.request.post("/api/admin/user-action", {
+    data: { userId: created.user.id, action: "suspend" },
+  });
+  expect(suspend.ok()).toBeTruthy();
+
+  await page.goto("/admin/audit");
+  await expect(page.getByRole("heading", { level: 1, name: "Audit log" })).toBeVisible();
+  await expect(page.getByText("user.suspend").first()).toBeVisible();
+});
+
+test("E2E-20 an admin can run the activation-expiry sweep", async ({ page, request }) => {
+  await signUpAndLogin(page, request, "owner@vrc6.com");
+  // Send a JSON content-type so Astro's CSRF origin check is skipped (a real
+  // browser sends an Origin header; the API request context doesn't).
+  const res = await page.request.post("/api/admin/run-expiry", { data: {} });
+  expect(res.ok()).toBeTruthy();
+  const body = (await res.json()) as { ok: boolean; expired: number };
+  expect(body.ok).toBe(true);
+  expect(typeof body.expired).toBe("number");
+});

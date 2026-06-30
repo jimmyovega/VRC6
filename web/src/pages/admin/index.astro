@@ -90,7 +90,13 @@ const users = await db
       }
     </div>
 
-    <p class="muted">Cron activation-expiry + an audit view arrive next.</p>
+    <h2 class="section pixel">MAINTENANCE</h2>
+    <div class="maint">
+      <button class="btn pixel" id="run-expiry">RUN ACTIVATION EXPIRY</button>
+      <a class="btn pixel" href="/admin/audit">VIEW AUDIT LOG</a>
+    </div>
+    <p class="result pixel" id="expiry-result" hidden></p>
+
     <p><a class="btn pixel back-link" href="/dashboard">BACK TO DASHBOARD</a></p>
   </div>
 </Layout>
@@ -121,6 +127,23 @@ const users = await db
       inviteResult.textContent = j.error ?? "Could not send invite.";
       inviteResult.classList.add("err");
     }
+  });
+
+  const expiryBtn = document.getElementById("run-expiry");
+  const expiryResult = document.getElementById("expiry-result");
+  expiryBtn?.addEventListener("click", async () => {
+    const res = await fetch("/api/admin/run-expiry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    const j = (await res.json().catch(() => ({}))) as { expired?: number; error?: string };
+    if (!expiryResult) return;
+    expiryResult.hidden = false;
+    expiryResult.classList.toggle("err", !res.ok);
+    expiryResult.textContent = res.ok
+      ? `Expiry sweep complete — ${j.expired ?? 0} account(s) expired.`
+      : (j.error ?? "Could not run expiry.");
+    if (res.ok && (j.expired ?? 0) > 0) setTimeout(() => location.reload(), 1200);
   });
 
   document.querySelectorAll<HTMLButtonElement>(".u-act").forEach((btn) => {
@@ -160,6 +183,15 @@ const users = await db
     display: flex;
     flex-direction: column;
     gap: 1rem;
+  }
+  .maint {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+  .maint .btn {
+    text-decoration: none;
+    cursor: pointer;
   }
   .field {
     display: flex;
