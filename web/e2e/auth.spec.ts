@@ -149,3 +149,10 @@ test("E2E-20 an admin can run the activation-expiry sweep", async ({ page, reque
   expect(body.ok).toBe(true);
   expect(typeof body.expired).toBe("number");
 });
+
+test("E2E-21 the Turnstile widget renders on the public auth forms", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.locator(".cf-turnstile")).toBeAttached();
+  await page.goto("/forgot-password");
+  await expect(page.locator(".cf-turnstile")).toBeAttached();
+});

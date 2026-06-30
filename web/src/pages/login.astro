@@ -1,10 +1,12 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import { getTurnstileSiteKey } from "../lib/turnstile";
 
 // Already signed in → home.
 if (Astro.locals.user) {
   return Astro.redirect("/");
 }
+const siteKey = getTurnstileSiteKey();
 ---
 
 <Layout center title="Log in — VRC6" description="Sign in to VRC6.">
@@ -20,11 +22,14 @@ if (Astro.locals.user) {
         <input type="password" name="password" required autocomplete="current-password" />
       </label>
       <p class="error pixel" id="login-error" hidden>Invalid email or password.</p>
+      <div class="cf-turnstile" data-sitekey={siteKey} data-theme="dark"></div>
       <button class="btn pixel submit" type="submit">SIGN IN</button>
       <a class="forgot-link pixel" href="/forgot-password">Forgot password?</a>
     </form>
   </div>
 </Layout>
+
+<script is:inline async defer src="https://challenges.cloudflare.com/turnstile/v0/api.js"></script>
 
 <script>
   const form = document.getElementById("login-form") as HTMLFormElement | null;
@@ -35,7 +40,10 @@ if (Astro.locals.user) {
     const data = new FormData(form);
     const res = await fetch("/api/auth/sign-in/email", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-turnstile-token": String(data.get("cf-turnstile-response") ?? ""),
+      },
       body: JSON.stringify({
         email: data.get("email"),
         password: data.get("password"),
