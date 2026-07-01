@@ -73,7 +73,13 @@ test("E2E-15 forgot-password shows a confirmation after submit", async ({ page }
 
 test("E2E-16 reset-password without a token shows an error", async ({ page }) => {
   await page.goto("/reset-password");
-  await expect(page.getByText(/Missing or invalid reset link/i)).toBeVisible();
+  await expect(page.getByText(/Missing reset link/i)).toBeVisible();
+});
+
+test("E2E-25 an expired/invalid reset link shows a recovery message", async ({ page }) => {
+  await page.goto("/reset-password?error=INVALID_TOKEN");
+  await expect(page.getByText(/invalid or has expired/i)).toBeVisible();
+  await expect(page.getByRole("link", { name: "REQUEST A NEW LINK" })).toBeVisible();
 });
 
 test("E2E-17 an admin can invite a user", async ({ page, request }) => {
