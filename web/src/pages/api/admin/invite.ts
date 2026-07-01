@@ -23,6 +23,10 @@ function tempPassword(): string {
 export const POST: APIRoute = async ({ request, locals }) => {
   const actor = locals.user;
   if (!actor || actor.role !== "admin") {
+    log.warn("invite forbidden", {
+      actorId: actor?.id ?? null,
+      actorRole: actor?.role ?? null,
+    });
     return json({ error: "Forbidden" }, 403);
   }
 
@@ -37,6 +41,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const role = body.role === "admin" ? "admin" : "editor";
   if (!email) return json({ error: "Email is required" }, 400);
 
+  log.info("invite requested", { actorId: actor.id, email, role });
+
   const auth = getAuth();
   const db = getDb(env.DB);
 
@@ -50,6 +56,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       headers: trusted,
     });
   } catch {
+    log.warn("invite rejected — already registered", { actorId: actor.id, email });
     return json({ error: "That email is already invited or registered." }, 409);
   }
 
@@ -74,5 +81,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ error: "User created, but the activation email failed to send." }, 502);
   }
 
+  log.info("invite sent", { actorId: actor.id, email, role });
   return json({ ok: true });
 };

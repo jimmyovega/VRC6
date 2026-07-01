@@ -89,6 +89,9 @@ export function getAuth() {
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 12,
+      // Activation links reuse this reset-token flow, so the default 1h is too
+      // short for an invite; 12h balances invitee convenience against exposure.
+      resetPasswordTokenExpiresIn: 60 * 60 * 12,
       sendResetPassword: async ({ user: u, url }) => {
         const inviting = (u as { status?: string }).status === "pending_activation";
         await sendEmail({
