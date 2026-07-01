@@ -1,6 +1,7 @@
 // Email sending via Resend. With no RESEND_API_KEY (local dev / tests), emails
 // are logged to the console instead of sent, so flows stay testable offline.
 import { env } from "cloudflare:workers";
+import { log } from "./log";
 
 const emailEnv = env as typeof env & {
   RESEND_API_KEY?: string;
@@ -22,9 +23,11 @@ export async function sendEmail(opts: {
   // Log the email locally when there's no key, or when EMAIL_DEBUG is set (handy
   // for grabbing activation/reset links during dev even while really sending).
   if (!key || emailEnv.EMAIL_DEBUG) {
-    console.log(
-      `[email:dev] to=${opts.to} subject="${opts.subject}"\n${opts.text ?? opts.html}`,
-    );
+    log.info("email dev-logged", {
+      to: opts.to,
+      subject: opts.subject,
+      body: opts.text ?? opts.html,
+    });
   }
   if (!key) {
     return { ok: true, dev: true };
@@ -45,7 +48,7 @@ export async function sendEmail(opts: {
     }),
   });
   if (!res.ok) {
-    console.error(`[email] Resend failed (${res.status}): ${await res.text()}`);
+    log.error("resend send failed", { status: res.status, body: await res.text() });
   }
   return { ok: res.ok, dev: false };
 }

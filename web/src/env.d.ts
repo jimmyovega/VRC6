@@ -25,5 +25,6 @@ declare namespace App {
   interface Locals extends Runtime {
     user: AuthUser | null;
     session: AuthSession | null;
+    requestId: string;
   }
 }

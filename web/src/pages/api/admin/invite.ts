@@ -4,6 +4,7 @@ import { env } from "cloudflare:workers";
 import { getDb, schema } from "../../../db";
 import { getAuth } from "../../../lib/auth";
 import { internalHeaders } from "../../../lib/internal";
+import { log } from "../../../lib/log";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -66,7 +67,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
       headers: trusted,
     });
   } catch (err) {
-    console.error("[invite] activation email failed", err);
+    log.error("invite activation email failed", {
+      email,
+      error: err instanceof Error ? err.message : String(err),
+    });
     return json({ error: "User created, but the activation email failed to send." }, 502);
   }
 
