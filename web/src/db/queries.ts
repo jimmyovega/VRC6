@@ -62,12 +62,12 @@ export async function getPublishedArticleBySlug(db: DB, slug: string) {
     .select({
       ...cardColumns,
       body: schema.articles.body,
-      author: schema.users.fullName,
-      authorUsername: schema.users.username,
+      author: schema.user.name,
+      authorUsername: schema.user.username,
     })
     .from(schema.articles)
     .leftJoin(schema.categories, eq(schema.articles.categoryId, schema.categories.id))
-    .leftJoin(schema.users, eq(schema.articles.authorId, schema.users.id))
+    .leftJoin(schema.user, eq(schema.articles.authorId, schema.user.id))
     .where(and(eq(schema.articles.slug, slug), eq(schema.articles.status, "published")))
     .limit(1);
   return row ?? null;

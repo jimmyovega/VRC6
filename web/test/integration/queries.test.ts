@@ -12,15 +12,23 @@ import {
 describe("M1 query helpers (D1)", () => {
   beforeEach(async () => {
     const db = getDb(env.DB);
-    await db
-      .insert(schema.users)
-      .values({ username: "admin", email: "admin@vrc6.com", role: "admin", status: "active" });
+    await db.insert(schema.user).values({
+      id: "u-admin",
+      name: "Admin",
+      username: "admin",
+      email: "admin@vrc6.com",
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      role: "admin",
+      status: "active",
+    });
     await db.insert(schema.categories).values([
       { type: "events", slug: "events", label: "Events" },
       { type: "art", slug: "art", label: "Art" },
     ]);
 
-    const [author] = await db.select().from(schema.users);
+    const [author] = await db.select().from(schema.user);
     const cats = await db.select().from(schema.categories);
     const events = cats.find((c) => c.slug === "events")!;
     const art = cats.find((c) => c.slug === "art")!;
@@ -52,7 +60,7 @@ describe("M1 query helpers (D1)", () => {
     const db = getDb(env.DB);
     const article = await getPublishedArticleBySlug(db, "live-event");
     expect(article?.title).toBe("Live Event");
-    expect(article?.author).toBe(null); // fullName not set in this fixture
+    expect(article?.author).toBe("Admin"); // user.name
     expect(article?.authorUsername).toBe("admin");
   });
 
