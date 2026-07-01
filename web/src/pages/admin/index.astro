@@ -1,4 +1,5 @@
 ---
+import { and, gt, like } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import Layout from "../../layouts/Layout.astro";
 import { getDb, schema } from "../../db";
@@ -16,6 +17,18 @@ const users = await db
   })
   .from(schema.user)
   .orderBy(schema.user.email);
+
+// Which pending users still have a live activation link (unexpired reset token)?
+const liveTokens = await db
+  .select({ userId: schema.verification.value })
+  .from(schema.verification)
+  .where(
+    and(
+      like(schema.verification.identifier, "reset-password:%"),
+      gt(schema.verification.expiresAt, new Date()),
+    ),
+  );
+const hasLiveLink = new Set(liveTokens.map((t) => t.userId));
 ---
 
 <Layout center topShare={1} bottomShare={3} title="Admin — VRC6">
@@ -58,6 +71,11 @@ const users = await db
               <span class={`tagpill st-${u.status}`}>
                 {u.status.replace(/_/g, " ").toUpperCase()}
               </span>
+              {u.status === "pending_activation" && (
+                <span class={`tagpill ${hasLiveLink.has(u.id) ? "link-ok" : "link-dead"}`}>
+                  {hasLiveLink.has(u.id) ? "LINK ACTIVE" : "LINK EXPIRED"}
+                </span>
+              )}
             </div>
             <div class="u-actions">
               {u.status === "suspended" ? (
@@ -70,6 +88,11 @@ const users = await db
                     SUSPEND
                   </button>
                 )
+              )}
+              {(u.status === "pending_activation" || u.status === "expired") && (
+                <button class="u-act pixel" data-id={u.id} data-action="resend">
+                  RESEND ACTIVATION
+                </button>
               )}
               <button
                 class="u-act pixel"
@@ -150,16 +173,20 @@ const users = await db
     btn.addEventListener("click", async () => {
       const action = btn.dataset.action;
       if (action === "delete" && !confirm("Delete this user?")) return;
-      const res = await fetch("/api/admin/user-action", {
+      // The resend action targets its own endpoint; everything else is a user-action.
+      const endpoint =
+        action === "resend" ? "/api/admin/resend-invite" : "/api/admin/user-action";
+      const payload =
+        action === "resend"
+          ? { userId: btn.dataset.id }
+          : { userId: btn.dataset.id, action, role: btn.dataset.role };
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: btn.dataset.id,
-          action,
-          role: btn.dataset.role,
-        }),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
+        if (action === "resend") alert("A fresh activation link has been sent.");
         location.reload();
       } else {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -262,9 +289,14 @@ const users = await db
     border: 1px solid var(--lime);
   }
   .st-suspended,
-  .st-deleted {
+  .st-deleted,
+  .link-dead {
     color: #fca5a5;
     border-color: #fca5a5;
+  }
+  .link-ok {
+    color: var(--phosphor);
+    border-color: var(--phosphor);
   }
   .u-actions {
     display: flex;

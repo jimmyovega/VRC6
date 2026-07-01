@@ -82,6 +82,24 @@ test("E2E-25 an expired/invalid reset link shows a recovery message", async ({ p
   await expect(page.getByRole("link", { name: "REQUEST A NEW LINK" })).toBeVisible();
 });
 
+test("E2E-26 admin sees link status and can resend activation to a pending user", async ({ page, request }) => {
+  await signUpAndLogin(page, request, "owner@vrc6.com");
+  const email = `resend-${Date.now()}@vrc6.com`;
+  await page.goto("/admin");
+  await page.locator('#invite-form input[name="email"]').fill(email);
+  await page.getByRole("button", { name: "SEND INVITE" }).click();
+  await expect(page.getByText(/Invite sent/i)).toBeVisible();
+
+  await page.reload();
+  const row = page.locator(".user-row", { hasText: email });
+  // A freshly-invited user has a live activation link.
+  await expect(row.getByText("LINK ACTIVE")).toBeVisible();
+
+  const userId = await row.getByRole("button", { name: "RESEND ACTIVATION" }).getAttribute("data-id");
+  const res = await page.request.post("/api/admin/resend-invite", { data: { userId } });
+  expect(res.ok()).toBeTruthy();
+});
+
 test("E2E-17 an admin can invite a user", async ({ page, request }) => {
   await signUpAndLogin(page, request, "owner@vrc6.com");
   await page.goto("/admin");
