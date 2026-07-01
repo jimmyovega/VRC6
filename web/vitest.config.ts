@@ -32,8 +32,12 @@ export default defineWorkersConfig(async () => {
           main: "./test/worker-entry.ts",
           wrangler: { configPath: "./wrangler.jsonc" },
           miniflare: {
-            // Expose migrations to the setup file as a test-only binding.
-            bindings: { TEST_MIGRATIONS: migrations },
+            // Expose migrations to the setup file as a test-only binding, plus a
+            // dummy auth secret so secret-dependent helpers are exercisable.
+            bindings: {
+              TEST_MIGRATIONS: migrations,
+              BETTER_AUTH_SECRET: "test-secret-for-internal-marker",
+            },
           },
         },
       },
