@@ -18,6 +18,7 @@ import {
 import { sendEmail } from "./email";
 import { verifyTurnstile } from "./turnstile";
 import { RATE_LIMITS, consumeRateLimit, rateLimitDisabled } from "./rate-limit";
+import { isInternalCall } from "./internal";
 
 // Public auth endpoints (paths relative to /api/auth) gated by Turnstile.
 const TURNSTILE_GUARDED_PATHS = new Set(["/sign-in/email", "/request-password-reset"]);
@@ -44,6 +45,10 @@ export function getAuth() {
       // sent in the `x-turnstile-token` header so it doesn't collide with the
       // better-auth request body schema.
       before: createAuthMiddleware(async (ctx) => {
+        // Trusted in-process calls (e.g. admin invite → requestPasswordReset)
+        // skip the public bot/rate protections.
+        if (isInternalCall(ctx.headers)) return;
+
         const ip =
           ctx.headers?.get("cf-connecting-ip") ??
           ctx.headers?.get("x-forwarded-for") ??

@@ -209,3 +209,9 @@ test("E2E-23 the security page exposes 2FA enrolment", async ({ page, request })
   await expect(page.getByRole("heading", { level: 1, name: "Security" })).toBeVisible();
   await expect(page.getByRole("button", { name: "ENABLE 2FA" })).toBeVisible();
 });
+
+test("E2E-24 responses carry a request-scoped x-trace-id header", async ({ request }) => {
+  const res = await request.get("/");
+  expect(res.ok()).toBeTruthy();
+  expect(res.headers()["x-trace-id"]).toBeTruthy();
+});

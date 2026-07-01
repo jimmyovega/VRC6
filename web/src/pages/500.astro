@@ -1,0 +1,45 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+// Astro renders this for unhandled errors in on-demand routes. The trace id is
+// set on locals in middleware; showing it lets a visitor quote the exact
+// request when reporting, so it can be found in Workers Logs.
+Astro.response.status = 500;
+const requestId = Astro.locals.requestId ?? "-";
+---
+
+<Layout title="Something broke — VRC6">
+  <div class="error">
+    <h1 class="page-title pixel">500</h1>
+    <p class="muted">Something glitched on our end. Try again in a moment.</p>
+    <p class="ref pixel">
+      ERROR REFERENCE
+      <code>{requestId}</code>
+    </p>
+    <a class="btn pixel" href="/">BACK TO HOME</a>
+  </div>
+</Layout>
+
+<style>
+  .error {
+    text-align: center;
+    padding: 3rem 1rem;
+  }
+  .ref {
+    font-size: 0.5rem;
+    color: var(--lime);
+    margin-top: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .ref code {
+    color: var(--phosphor);
+    font-size: 0.8rem;
+    word-break: break-all;
+  }
+  .error .btn {
+    margin-top: 1.5rem;
+  }
+</style>
