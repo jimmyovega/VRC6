@@ -37,6 +37,10 @@ export default defineWorkersConfig(async () => {
             bindings: {
               TEST_MIGRATIONS: migrations,
               BETTER_AUTH_SECRET: "test-secret-for-internal-marker",
+              // A key is present but EMAIL_DISABLED keeps every test log-only —
+              // no test ever makes a live Resend call.
+              RESEND_API_KEY: "re_test_dummy_key",
+              EMAIL_DISABLED: "1",
             },
           },
         },

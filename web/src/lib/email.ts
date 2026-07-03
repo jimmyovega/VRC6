@@ -7,6 +7,7 @@ const emailEnv = env as typeof env & {
   RESEND_API_KEY?: string;
   RESEND_FROM?: string;
   EMAIL_DEBUG?: string;
+  EMAIL_DISABLED?: string;
 };
 
 // resend.dev works without a verified domain (only sends to the account owner);
@@ -20,16 +21,18 @@ export async function sendEmail(opts: {
   text?: string;
 }): Promise<{ ok: boolean; dev: boolean }> {
   const key = emailEnv.RESEND_API_KEY;
-  // Log the email locally when there's no key, or when EMAIL_DEBUG is set (handy
-  // for grabbing activation/reset links during dev even while really sending).
-  if (!key || emailEnv.EMAIL_DEBUG) {
+  // Log-only (never a live send) when there's no key OR an explicit disable flag
+  // (dev / E2E / CI, so tests don't depend on Resend). EMAIL_DEBUG logs the mail
+  // AND still sends — handy for grabbing activation/reset links during dev.
+  const logOnly = !key || !!emailEnv.EMAIL_DISABLED;
+  if (logOnly || emailEnv.EMAIL_DEBUG) {
     log.info("email dev-logged", {
       to: opts.to,
       subject: opts.subject,
       body: opts.text ?? opts.html,
     });
   }
-  if (!key) {
+  if (logOnly) {
     return { ok: true, dev: true };
   }
 
