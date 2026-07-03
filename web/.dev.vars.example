@@ -16,7 +16,10 @@ ADMIN_EMAIL=you@example.com
 RESEND_API_KEY=
 # Verified sender for production (a domain verified at resend.com/domains).
 # RESEND_FROM=VRC6 <noreply@your-domain>
-EMAIL_DEBUG=1
+# EMAIL_DEBUG=1  logs the email AND still sends (grab activation/reset links in dev).
+# EMAIL_DISABLED=1 is log-only — never a live send. Keep it set for local E2E so
+# invite tests don't depend on Resend; unset it (or use EMAIL_DEBUG) for real sends.
+EMAIL_DISABLED=1
 
 # --- Cloudflare Turnstile ---
 # Public site key (safe to commit/expose). Dev falls back to the always-pass test key.

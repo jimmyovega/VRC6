@@ -54,6 +54,7 @@ jobs:
           echo "BETTER_AUTH_URL=http://localhost:8788" >> .dev.vars
           echo "TURNSTILE_DISABLED=1" >> .dev.vars
           echo "RATE_LIMIT_DISABLED=1" >> .dev.vars
+          echo "EMAIL_DISABLED=1" >> .dev.vars
 
       - name: Set up local D1 (build + migrate + seed)
         run: npm run e2e:setup

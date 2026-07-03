@@ -19,6 +19,8 @@ import { sendEmail } from "./email";
 import { verifyTurnstile } from "./turnstile";
 import { RATE_LIMITS, consumeRateLimit, rateLimitDisabled } from "./rate-limit";
 import { isInternalCall } from "./internal";
+import { logAudit } from "./audit";
+import { log } from "./log";
 
 // Public auth endpoints (paths relative to /api/auth) gated by Turnstile.
 const TURNSTILE_GUARDED_PATHS = new Set(["/sign-in/email", "/request-password-reset"]);
@@ -113,6 +115,10 @@ export function getAuth() {
             .update(user)
             .set({ status: "active", activatedAt: new Date() })
             .where(eq(user.id, u.id));
+          // Record the self-service activation in the audit trail + logs, so the
+          // whole invite→activate lifecycle is traceable (not just the admin half).
+          await logAudit(db, { actorId: u.id, action: "user.activated", targetUserId: u.id });
+          log.info("account activated", { userId: u.id, email: u.email });
         }
       },
     },

@@ -100,6 +100,15 @@ test("E2E-26 admin sees link status and can resend activation to a pending user"
   expect(res.ok()).toBeTruthy();
 });
 
+test("E2E-27 a logged-in user can log out", async ({ page, request }) => {
+  await signUpAndLogin(page, request, `logout-${Date.now()}@vrc6.com`);
+  await expect(page.getByRole("button", { name: "LOG OUT" })).toBeVisible();
+  await page.getByRole("button", { name: "LOG OUT" }).click();
+  // The header must re-render logged-out (session actually cleared).
+  await expect(page.getByRole("link", { name: "LOG IN" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "LOG OUT" })).toHaveCount(0);
+});
+
 test("E2E-17 an admin can invite a user", async ({ page, request }) => {
   await signUpAndLogin(page, request, "owner@vrc6.com");
   await page.goto("/admin");
