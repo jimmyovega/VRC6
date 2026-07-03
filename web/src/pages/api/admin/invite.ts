@@ -50,21 +50,54 @@ export const POST: APIRoute = async ({ request, locals }) => {
   // rate-limit before-hook.
   const trusted = internalHeaders(request.headers);
 
-  try {
-    await auth.api.signUpEmail({
-      body: { email, password: tempPassword(), name },
-      headers: trusted,
+  const [existing] = await db
+    .select({ id: schema.user.id, status: schema.user.status })
+    .from(schema.user)
+    .where(eq(schema.user.email, email))
+    .limit(1);
+
+  if (existing && existing.status !== "deleted") {
+    // active = real user; pending/expired already hold an invite (use Resend).
+    log.warn("invite rejected — already registered", {
+      actorId: actor.id,
+      email,
+      status: existing.status,
     });
-  } catch {
-    log.warn("invite rejected — already registered", { actorId: actor.id, email });
     return json({ error: "That email is already invited or registered." }, 409);
   }
 
-  // New sign-ups default to active; an invited user must activate first.
-  await db
-    .update(schema.user)
-    .set({ role, status: "pending_activation" })
-    .where(eq(schema.user.email, email));
+  if (existing) {
+    // Revive a soft-deleted account as a fresh invite, keeping the same user id
+    // so historical references (e.g. article authorship) are preserved.
+    await db
+      .update(schema.user)
+      .set({
+        name,
+        role,
+        status: "pending_activation",
+        deletedAt: null,
+        expiredAt: null,
+        suspendedAt: null,
+        activatedAt: null,
+      })
+      .where(eq(schema.user.id, existing.id));
+    log.info("invite revived deleted user", { actorId: actor.id, email, role });
+  } else {
+    try {
+      await auth.api.signUpEmail({
+        body: { email, password: tempPassword(), name },
+        headers: trusted,
+      });
+    } catch {
+      log.warn("invite rejected — sign-up failed", { actorId: actor.id, email });
+      return json({ error: "That email is already invited or registered." }, 409);
+    }
+    // New sign-ups default to active; an invited user must activate first.
+    await db
+      .update(schema.user)
+      .set({ role, status: "pending_activation" })
+      .where(eq(schema.user.email, email));
+  }
 
   // Send the activation (set-password) email. baseURL (BETTER_AUTH_URL) makes
   // the link absolute.

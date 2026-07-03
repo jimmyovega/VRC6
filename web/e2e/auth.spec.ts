@@ -138,6 +138,34 @@ test("E2E-28 a deleted user can't be mutated", async ({ page, request, playwrigh
   await expect(row.getByRole("button", { name: /MAKE (ADMIN|EDITOR)/ })).toHaveCount(0);
 });
 
+test("E2E-29 an admin can re-invite a deleted user (revives the same account)", async ({ page, request, playwright }) => {
+  const email = `reinvite-${Date.now()}@vrc6.com`;
+  const ctx = await playwright.request.newContext({
+    baseURL: "http://localhost:8788",
+    extraHTTPHeaders: { Origin: "http://localhost:8788" },
+  });
+  const created = (await (
+    await ctx.post("/api/auth/sign-up/email", { data: { email, password: "Sup3rSecret!23", name: "Re Invite" } })
+  ).json()) as { user: { id: string } };
+  await ctx.dispose();
+
+  await signUpAndLogin(page, request, "owner@vrc6.com");
+  expect(
+    (await page.request.post("/api/admin/user-action", { data: { userId: created.user.id, action: "delete" } })).ok(),
+  ).toBeTruthy();
+
+  // Re-inviting the same email revives it (200), rather than 409.
+  const reinvite = await page.request.post("/api/admin/invite", { data: { email, name: "Re Invite", role: "editor" } });
+  expect(reinvite.ok()).toBeTruthy();
+
+  await page.goto("/admin");
+  const row = page.locator(".user-row", { hasText: email });
+  await expect(row.getByText("PENDING ACTIVATION")).toBeVisible();
+  // Same user id reused (revived, not recreated).
+  const revivedId = await row.getByRole("button", { name: "RESEND ACTIVATION" }).getAttribute("data-id");
+  expect(revivedId).toBe(created.user.id);
+});
+
 test("E2E-17 an admin can invite a user", async ({ page, request }) => {
   await signUpAndLogin(page, request, "owner@vrc6.com");
   await page.goto("/admin");
