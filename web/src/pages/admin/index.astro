@@ -94,14 +94,16 @@ const hasLiveLink = new Set(liveTokens.map((t) => t.userId));
                   RESEND ACTIVATION
                 </button>
               )}
-              <button
-                class="u-act pixel"
-                data-id={u.id}
-                data-action="setRole"
-                data-role={u.role === "admin" ? "editor" : "admin"}
-              >
-                {u.role === "admin" ? "MAKE EDITOR" : "MAKE ADMIN"}
-              </button>
+              {u.status !== "deleted" && (
+                <button
+                  class="u-act pixel"
+                  data-id={u.id}
+                  data-action="setRole"
+                  data-role={u.role === "admin" ? "editor" : "admin"}
+                >
+                  {u.role === "admin" ? "MAKE EDITOR" : "MAKE ADMIN"}
+                </button>
+              )}
               {u.status !== "deleted" && (
                 <button class="u-act danger pixel" data-id={u.id} data-action="delete">
                   DELETE
