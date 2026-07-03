@@ -109,6 +109,35 @@ test("E2E-27 a logged-in user can log out", async ({ page, request }) => {
   await expect(page.getByRole("button", { name: "LOG OUT" })).toHaveCount(0);
 });
 
+test("E2E-28 a deleted user can't be mutated", async ({ page, request, playwright }) => {
+  const email = `deltest-${Date.now()}@vrc6.com`;
+  const ctx = await playwright.request.newContext({
+    baseURL: "http://localhost:8788",
+    extraHTTPHeaders: { Origin: "http://localhost:8788" },
+  });
+  const signup = await ctx.post("/api/auth/sign-up/email", {
+    data: { email, password: "Sup3rSecret!23", name: "Del Test" },
+  });
+  const created = (await signup.json()) as { user: { id: string } };
+  await ctx.dispose();
+
+  await signUpAndLogin(page, request, "owner@vrc6.com");
+  expect(
+    (await page.request.post("/api/admin/user-action", { data: { userId: created.user.id, action: "delete" } })).ok(),
+  ).toBeTruthy();
+
+  // Server rejects any further action on a deleted user.
+  const setRole = await page.request.post("/api/admin/user-action", {
+    data: { userId: created.user.id, action: "setRole", role: "admin" },
+  });
+  expect(setRole.ok()).toBeFalsy();
+
+  // And the admin UI shows no action buttons for the deleted user.
+  await page.goto("/admin");
+  const row = page.locator(".user-row", { hasText: email });
+  await expect(row.getByRole("button", { name: /MAKE (ADMIN|EDITOR)/ })).toHaveCount(0);
+});
+
 test("E2E-17 an admin can invite a user", async ({ page, request }) => {
   await signUpAndLogin(page, request, "owner@vrc6.com");
   await page.goto("/admin");

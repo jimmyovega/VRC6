@@ -40,6 +40,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
     .limit(1);
   if (!target) return json({ error: "User not found" }, 404);
 
+  // A soft-deleted account is terminal — reject any further mutation.
+  if (target.status === "deleted") {
+    return json({ error: "This account has been deleted." }, 400);
+  }
+
   // Self-protection.
   if (target.id === actor.id && (action === "suspend" || action === "delete")) {
     return json({ error: "You can't suspend or delete your own account." }, 400);
