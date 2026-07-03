@@ -132,10 +132,9 @@ test("E2E-28 a deleted user can't be mutated", async ({ page, request, playwrigh
   });
   expect(setRole.ok()).toBeFalsy();
 
-  // And the admin UI shows no action buttons for the deleted user.
+  // And the admin UI hides the deleted user entirely.
   await page.goto("/admin");
-  const row = page.locator(".user-row", { hasText: email });
-  await expect(row.getByRole("button", { name: /MAKE (ADMIN|EDITOR)/ })).toHaveCount(0);
+  await expect(page.locator(".user-row", { hasText: email })).toHaveCount(0);
 });
 
 test("E2E-29 an admin can re-invite a deleted user (revives the same account)", async ({ page, request, playwright }) => {
