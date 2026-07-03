@@ -24,6 +24,13 @@ test("E2E-10 sign up via API then log in through the form", async ({ page, reque
   await expect(page.getByRole("button", { name: "LOG OUT" })).toBeVisible();
 });
 
+test("E2E-30 the 2FA code step is hidden on the login page until needed", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.getByRole("button", { name: "SIGN IN" })).toBeVisible();
+  // The 2FA form only appears after a two-factor sign-in redirect.
+  await expect(page.getByRole("button", { name: "VERIFY" })).toBeHidden();
+});
+
 test("E2E-11 wrong credentials show an error", async ({ page }) => {
   await page.goto("/login");
   await page.locator('input[name="email"]').fill("nobody@vrc6.com");

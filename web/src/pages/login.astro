@@ -105,6 +105,11 @@ const siteKey = getTurnstileSiteKey();
     flex-direction: column;
     gap: 1rem;
   }
+  /* Author display:flex would otherwise override the `hidden` attribute, so the
+     2FA step (and the hidden login form during 2FA) must opt back into none. */
+  .login-card[hidden] {
+    display: none;
+  }
   .field {
     display: flex;
     flex-direction: column;
