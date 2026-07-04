@@ -3,7 +3,7 @@ import type { APIRoute } from "astro";
 // TEMPORARY diagnostic — verifies Sentry error reporting end-to-end. Admin-only
 // (random visitors get 403, so it can't be used to spam errors). Visiting it as
 // an admin throws, producing a 500 + a Sentry issue tagged with the requestId.
-// Remove once verified.
+// Remove once verified. (No leading underscore — Astro excludes those from routing.)
 export const GET: APIRoute = async ({ locals }) => {
   const actor = locals.user;
   if (!actor || actor.role !== "admin") {
