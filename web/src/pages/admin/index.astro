@@ -86,7 +86,7 @@ const hasLiveLink = new Set(liveTokens.map((t) => t.userId));
                   REACTIVATE
                 </button>
               ) : (
-                u.status !== "deleted" && (
+                u.status !== "deleted" && u.id !== me.id && (
                   <button class="u-act pixel" data-id={u.id} data-action="suspend">
                     SUSPEND
                   </button>
@@ -97,7 +97,7 @@ const hasLiveLink = new Set(liveTokens.map((t) => t.userId));
                   RESEND ACTIVATION
                 </button>
               )}
-              {u.status !== "deleted" && (
+              {u.status !== "deleted" && u.id !== me.id && (
                 <button
                   class="u-act pixel"
                   data-id={u.id}
@@ -107,11 +107,12 @@ const hasLiveLink = new Set(liveTokens.map((t) => t.userId));
                   {u.role === "admin" ? "MAKE EDITOR" : "MAKE ADMIN"}
                 </button>
               )}
-              {u.status !== "deleted" && (
+              {u.status !== "deleted" && u.id !== me.id && (
                 <button class="u-act danger pixel" data-id={u.id} data-action="delete">
                   DELETE
                 </button>
               )}
+              {u.id === me.id && <span class="u-self pixel">YOU</span>}
             </div>
           </div>
         ))
@@ -325,6 +326,12 @@ const hasLiveLink = new Set(liveTokens.map((t) => t.userId));
     background: var(--deep-moss);
     color: #fca5a5;
     border-color: #fca5a5;
+  }
+  .u-self {
+    font-size: 0.4rem;
+    color: var(--lime);
+    align-self: center;
+    opacity: 0.75;
   }
   .submit,
   .back-link {
