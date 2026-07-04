@@ -16,7 +16,10 @@ export default defineConfig({
   output: 'server',
   adapter: cloudflare(),
   vite: {
-    build: { sourcemap: sentryUpload },
+    // 'hidden' emits maps (Sentry uploads them via injected debug IDs) but adds
+    // NO sourceMappingURL comment — otherwise wrangler errors on the .map we
+    // delete after upload ("Invalid source map path ... does not exist").
+    build: { sourcemap: sentryUpload ? 'hidden' : false },
     plugins: sentryUpload
       ? [
           sentryVitePlugin({
