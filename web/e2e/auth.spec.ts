@@ -183,6 +183,16 @@ test("E2E-29 an admin can re-invite a deleted user (revives the same account)", 
   expect(revivedId).toBe(created.user.id);
 });
 
+test("E2E-32 an admin can't act on their own account in the list", async ({ page, request }) => {
+  await signUpAndLogin(page, request, "owner@vrc6.com");
+  await page.goto("/admin");
+  const ownRow = page.locator(".user-row", { hasText: "owner@vrc6.com" });
+  await expect(ownRow.getByText("YOU")).toBeVisible();
+  await expect(ownRow.getByRole("button", { name: "DELETE" })).toHaveCount(0);
+  await expect(ownRow.getByRole("button", { name: "SUSPEND" })).toHaveCount(0);
+  await expect(ownRow.getByRole("button", { name: /MAKE (ADMIN|EDITOR)/ })).toHaveCount(0);
+});
+
 test("E2E-17 an admin can invite a user", async ({ page, request }) => {
   await signUpAndLogin(page, request, "owner@vrc6.com");
   await page.goto("/admin");
