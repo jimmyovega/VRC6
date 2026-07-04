@@ -30,6 +30,7 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.12.21",
     "@playwright/test": "^1.61.1",
+    "@sentry/vite-plugin": "^5.3.0",
     "@types/node": "^26.0.1",
     "@types/qrcode": "^1.5.6",
     "drizzle-kit": "^0.31.10",
