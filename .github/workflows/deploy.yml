@@ -45,7 +45,7 @@ jobs:
           # Enables Sentry source-map upload (astro.config gates on the token).
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: vrc6
-          SENTRY_PROJECT: node-cloudflare-workers-1
+          SENTRY_PROJECT: node-cloudflare-workers
 
       - name: Deploy
         uses: cloudflare/wrangler-action@v3
