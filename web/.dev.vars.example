@@ -36,3 +36,9 @@ RATE_LIMIT_DISABLED=1
 # --- Activation expiry (optional) ---
 # Days a pending invite stays valid before the cron sweep expires it (default 7).
 # ACTIVATION_TTL_DAYS=7
+
+# --- Sentry error reporting (optional in dev; a prod secret) ---
+# Unset here -> the SDK is inert (no events). Set it to see local errors in
+# Sentry. In prod: `wrangler secret put SENTRY_DSN`.
+# SENTRY_DSN=
+# SENTRY_ENVIRONMENT=development

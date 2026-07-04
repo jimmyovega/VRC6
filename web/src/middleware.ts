@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/cloudflare";
 import { defineMiddleware } from "astro:middleware";
 import { getAuth } from "./lib/auth";
 import { log, runWithRequestId } from "./lib/log";
@@ -31,7 +32,10 @@ export const onRequest = defineMiddleware((context, next) => {
       return response;
     } catch (err) {
       // Unhandled errors are logged with the trace id so they can be found in
-      // Workers Logs by the reference shown on the 500 page.
+      // Workers Logs by the reference shown on the 500 page. Also report to
+      // Sentry (no-op without a DSN) — Astro renders 500.astro and swallows the
+      // exception, so withSentry at the worker level wouldn't otherwise see it.
+      Sentry.captureException(err, { tags: { requestId, path } });
       log.error("unhandled request error", {
         path,
         method: context.request.method,
