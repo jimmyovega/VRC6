@@ -24,6 +24,17 @@ test("E2E-10 sign up via API then log in through the form", async ({ page, reque
   await expect(page.getByRole("button", { name: "LOG OUT" })).toBeVisible();
 });
 
+test("E2E-31 the header nav stays within a narrow viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 780 });
+  await page.goto("/contact");
+  await expect(page.getByRole("link", { name: "CONTACT US" })).toBeVisible();
+  // Nothing overflows horizontally (the header wraps instead of squishing).
+  const overflows = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+  );
+  expect(overflows).toBe(false);
+});
+
 test("E2E-30 the 2FA code step is hidden on the login page until needed", async ({ page }) => {
   await page.goto("/login");
   await expect(page.getByRole("button", { name: "SIGN IN" })).toBeVisible();
