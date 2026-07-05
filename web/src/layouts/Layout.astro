@@ -45,7 +45,17 @@ const user = Astro.locals.user;
   >
     <header class="site-header">
       <a class="logo pixel" href="/">VRC6</a>
-      <nav class="header-nav">
+      <button
+        class="nav-toggle"
+        id="nav-toggle"
+        type="button"
+        aria-label="Toggle menu"
+        aria-controls="header-nav"
+        aria-expanded="false"
+      >
+        <span></span><span></span><span></span>
+      </button>
+      <nav class="header-nav" id="header-nav">
         <a class="contact pixel" href="/contact">CONTACT US</a>
         {user && <a class="contact pixel" href="/dashboard">DASHBOARD</a>}
         {user?.role === "admin" && <a class="contact pixel" href="/admin">ADMIN</a>}
@@ -70,6 +80,14 @@ const user = Astro.locals.user;
     </footer>
 
     <script>
+      // Mobile nav: the hamburger toggles the collapsed menu.
+      const navToggle = document.getElementById("nav-toggle");
+      const headerNav = document.getElementById("header-nav");
+      navToggle?.addEventListener("click", () => {
+        const open = headerNav?.classList.toggle("open") ?? false;
+        navToggle.setAttribute("aria-expanded", String(open));
+      });
+
       document.getElementById("logout-btn")?.addEventListener("click", async () => {
         // better-auth needs a JSON content-type (else 415) AND a body it can
         // parse (an empty body is a 400) — send an empty object.
@@ -157,6 +175,41 @@ const user = Astro.locals.user;
   button.contact {
     cursor: pointer;
     font-family: "Press Start 2P", monospace;
+  }
+  /* Hamburger toggle — hidden on desktop, shown on mobile. */
+  .nav-toggle {
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 7px;
+    background-color: var(--lime);
+    border: 2px solid var(--phosphor);
+    box-shadow: 3px 3px 0 var(--phosphor);
+    cursor: pointer;
+  }
+  .nav-toggle span {
+    display: block;
+    width: 22px;
+    height: 3px;
+    background-color: var(--deep-moss);
+  }
+  @media (max-width: 640px) {
+    .nav-toggle {
+      display: flex;
+    }
+    /* Collapse the nav into a full-width dropdown, toggled by the hamburger. */
+    .header-nav {
+      display: none;
+      flex-basis: 100%;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .header-nav.open {
+      display: flex;
+    }
+    .header-nav .contact {
+      text-align: center;
+    }
   }
   .site-main {
     flex: 1;

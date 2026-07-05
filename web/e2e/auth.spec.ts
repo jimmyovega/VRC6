@@ -24,15 +24,27 @@ test("E2E-10 sign up via API then log in through the form", async ({ page, reque
   await expect(page.getByRole("button", { name: "LOG OUT" })).toBeVisible();
 });
 
-test("E2E-31 the header nav stays within a narrow viewport", async ({ page }) => {
+test("E2E-31 the mobile header collapses the nav behind a hamburger", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 780 });
   await page.goto("/contact");
-  await expect(page.getByRole("link", { name: "CONTACT US" })).toBeVisible();
-  // Nothing overflows horizontally (the header wraps instead of squishing).
+  const toggle = page.getByRole("button", { name: /toggle menu/i });
+  await expect(toggle).toBeVisible();
+  // Collapsed by default, and nothing overflows horizontally.
+  await expect(page.getByRole("link", { name: "CONTACT US" })).toBeHidden();
   const overflows = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
   );
   expect(overflows).toBe(false);
+  // The hamburger reveals the nav.
+  await toggle.click();
+  await expect(page.getByRole("link", { name: "CONTACT US" })).toBeVisible();
+});
+
+test("E2E-33 the desktop header shows the nav inline (no hamburger)", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/contact");
+  await expect(page.getByRole("link", { name: "CONTACT US" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /toggle menu/i })).toBeHidden();
 });
 
 test("E2E-30 the 2FA code step is hidden on the login page until needed", async ({ page }) => {
