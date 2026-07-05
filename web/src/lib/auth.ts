@@ -77,8 +77,12 @@ export function getAuth() {
         if (TURNSTILE_GUARDED_PATHS.has(ctx.path)) {
           const token = ctx.headers?.get("x-turnstile-token");
           if (!(await verifyTurnstile(token, ip === "unknown" ? undefined : ip))) {
+            // Distinguish "didn't solve the challenge" from "challenge failed"
+            // so the form can tell the user what to actually do next.
             throw new APIError("FORBIDDEN", {
-              message: "Verification failed. Please try again.",
+              message: token
+                ? "Verification failed. Please try again."
+                : "Please complete the human verification challenge before signing in.",
             });
           }
         }

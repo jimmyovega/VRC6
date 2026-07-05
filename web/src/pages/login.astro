@@ -44,6 +44,11 @@ const siteKey = getTurnstileSiteKey();
 <script>
   const form = document.getElementById("login-form") as HTMLFormElement | null;
   const err = document.getElementById("login-error");
+  const showError = (msg: string) => {
+    if (!err) return;
+    err.textContent = msg;
+    err.hidden = false;
+  };
   form?.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (err) err.hidden = true;
@@ -69,8 +74,19 @@ const siteKey = getTurnstileSiteKey();
       } else {
         window.location.href = "/";
       }
-    } else if (err) {
-      err.hidden = false;
+      return;
+    }
+    // The Turnstile token is single-use — reset the widget so the next attempt
+    // gets a fresh challenge instead of resubmitting a spent/empty token.
+    (window as unknown as { turnstile?: { reset?: () => void } }).turnstile?.reset?.();
+    // 403 = the bot gate (Turnstile) rejected the request; 429 = rate limit.
+    // Both carry a meaningful server message worth showing verbatim — only a
+    // genuine 401 is actually "invalid email or password".
+    const body = (await res.json().catch(() => ({}))) as { message?: string };
+    if (res.status === 403 || res.status === 429) {
+      showError(body.message ?? "Please complete the human verification challenge.");
+    } else {
+      showError("Invalid email or password.");
     }
   });
 
