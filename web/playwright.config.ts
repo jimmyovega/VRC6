@@ -7,7 +7,12 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  // Every test shares one `wrangler dev` + one local D1, so high parallelism
+  // oversubscribes them and causes contention timeouts under machine load. A
+  // low, fixed worker count keeps the run stable; retries absorb the occasional
+  // cold-start / load straggler.
+  workers: 2,
+  retries: 2,
   reporter: "list",
   use: {
     baseURL: "http://localhost:8788",
