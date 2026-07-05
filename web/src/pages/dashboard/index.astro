@@ -1,11 +1,17 @@
 ---
+import { env } from "cloudflare:workers";
 import Layout from "../../layouts/Layout.astro";
+import { getDb } from "../../db";
+import { getArticlesByAuthor } from "../../db/queries";
+import { formatDate } from "../../lib/date";
 
 // Route protection is enforced in middleware; a user is guaranteed here.
 const user = Astro.locals.user!;
+const db = getDb(env.DB);
+const articles = await getArticlesByAuthor(db, user.id);
 ---
 
-<Layout center topShare={1} bottomShare={3} title="Dashboard — VRC6">
+<Layout title="Dashboard — VRC6">
   <div class="prose dash">
     <h1 class="page-title pixel">Dashboard</h1>
     <p>
@@ -14,33 +20,122 @@ const user = Astro.locals.user!;
     <p class="meta pixel">
       ROLE: {user.role.toUpperCase()} · STATUS: {user.status.toUpperCase()}
     </p>
+    <div class="dash-actions">
+      {user.role === "admin" && <a class="btn pixel" href="/admin">ADMIN</a>}
+      <a class="btn pixel" href="/dashboard/security">SECURITY &amp; 2FA</a>
+    </div>
+
+    <div class="articles-head">
+      <h2 class="section pixel">YOUR ARTICLES</h2>
+      <form method="POST" action="/api/articles" class="new-article-form">
+        <button class="btn pixel new-article" type="submit">+ NEW ARTICLE</button>
+      </form>
+    </div>
+
     {
-      user.role === "admin" && (
-        <p>
-          <a class="btn pixel" href="/admin">
-            ADMIN
-          </a>
-        </p>
+      articles.length === 0 ? (
+        <p class="muted">No articles yet. Start one with “+ NEW ARTICLE”.</p>
+      ) : (
+        <ul class="article-list">
+          {articles.map((a) => (
+            <li class="article-row card">
+              <a class="a-title" href={`/dashboard/articles/${a.id}/edit`}>
+                {a.title}
+              </a>
+              <div class="a-meta pixel">
+                <span class={`tagpill st-${a.status}`}>
+                  {a.status.replace(/_/g, " ").toUpperCase()}
+                </span>
+                {a.category && <span class="a-cat">{a.category}</span>}
+                <span class="a-date">Edited {formatDate(a.updatedAt)}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
       )
     }
-    <p>
-      <a class="btn pixel" href="/dashboard/security">SECURITY &amp; 2FA</a>
-    </p>
-    <p class="muted">Your drafts and the article editor arrive in M3.</p>
   </div>
 </Layout>
 
 <style>
+  .new-article-form {
+    margin: 0;
+  }
   .dash {
-    max-width: 640px;
+    max-width: 720px;
     margin-inline: auto;
+    width: 100%;
   }
   .meta {
     font-size: 0.5rem;
     color: var(--lime);
   }
-  .btn {
-    display: inline-block;
+  .dash-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .dash-actions .btn {
     text-decoration: none;
+  }
+  .articles-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+  .section {
+    font-size: 0.7rem;
+    color: var(--lime);
+    margin: 1rem 0 0.75rem;
+  }
+  .new-article {
+    cursor: pointer;
+  }
+  .article-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .article-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.85rem 1rem;
+  }
+  .a-title {
+    color: var(--phosphor);
+    text-decoration: none;
+    font-size: 1.05rem;
+  }
+  .a-title:hover {
+    color: var(--lime);
+  }
+  .a-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .tagpill {
+    font-size: 0.4rem;
+    padding: 0.3rem 0.45rem;
+    background: var(--deep-moss);
+    color: var(--phosphor);
+    border: 1px solid var(--lime);
+  }
+  .st-published {
+    color: var(--lime);
+    border-color: var(--lime);
+  }
+  .a-cat,
+  .a-date {
+    font-size: 0.5rem;
+    color: var(--lime);
   }
 </style>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bodyToText, readingTimeMinutes, renderBodyToHtml } from "../../src/lib/body";
+import { bodyToText, isDocJson, readingTimeMinutes, renderBodyToHtml } from "../../src/lib/body";
 
 describe("renderBodyToHtml — legacy M1 shape", () => {
   it("renders paragraph blocks as <p> elements", () => {
@@ -84,6 +84,21 @@ describe("renderBodyToHtml — security", () => {
     const img = (src: unknown) => ({ type: "doc", content: [{ type: "image", attrs: { src } }] });
     expect(renderBodyToHtml(img("javascript:x"))).toBe("");
     expect(renderBodyToHtml(img("https://cdn.vrc6.com/a.png"))).toContain('<img src="https://cdn.vrc6.com/a.png"');
+  });
+});
+
+describe("isDocJson", () => {
+  it("accepts a well-formed TipTap doc", () => {
+    expect(isDocJson({ type: "doc", content: [{ type: "paragraph" }] })).toBe(true);
+    expect(isDocJson({ type: "doc", content: [] })).toBe(true);
+  });
+
+  it("rejects anything that isn't a doc node with a content array", () => {
+    expect(isDocJson(null)).toBe(false);
+    expect(isDocJson("<p>hi</p>")).toBe(false);
+    expect(isDocJson({ type: "paragraph", content: [] })).toBe(false);
+    expect(isDocJson({ type: "doc" })).toBe(false);
+    expect(isDocJson({ type: "doc", content: "nope" })).toBe(false);
   });
 });
 
