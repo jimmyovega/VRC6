@@ -1,0 +1,374 @@
+---
+import { env } from "cloudflare:workers";
+import Layout from "../../../../layouts/Layout.astro";
+import { getDb } from "../../../../db";
+import { getArticleById } from "../../../../db/queries";
+import { canEditArticle } from "../../../../lib/permissions";
+import { isDocJson } from "../../../../lib/body";
+
+// Authenticated (middleware gates /dashboard/*); load + authorize the article.
+const user = Astro.locals.user!;
+const id = Number(Astro.params.id);
+if (!Number.isInteger(id) || id <= 0) return Astro.redirect("/dashboard");
+
+const db = getDb(env.DB);
+const article = await getArticleById(db, id);
+// Missing, or not editable by this user → back to the dashboard.
+if (!article || !canEditArticle(user, article)) return Astro.redirect("/dashboard");
+
+// New drafts are stored as a proper TipTap doc; anything else (e.g. a legacy
+// M1 body) opens as a blank canvas rather than mis-parsing.
+const initialBody = isDocJson(article.body)
+  ? article.body
+  : { type: "doc", content: [{ type: "paragraph" }] };
+const isPlaceholderTitle = article.title === "Untitled draft";
+// Escape `<` so the embedded JSON can't break out of the <script> tag.
+const bodyJson = JSON.stringify(initialBody).replace(/</g, "\\u003c");
+---
+
+<Layout title={`Edit — ${article.title} — VRC6`}>
+  <div class="editor-page" id="editor-app" data-article-id={id}>
+    <a class="back" href="/dashboard">&larr; Back to dashboard</a>
+    <div class="editor-head">
+      <span class={`tagpill st-${article.status}`}>{article.status.replace(/_/g, " ").toUpperCase()}</span>
+      <span class="save-status pixel" id="save-status">Saved ✓</span>
+      <button class="btn pixel save-now" id="save-now" type="button">SAVE</button>
+    </div>
+
+    <input
+      class="art-title"
+      id="art-title"
+      type="text"
+      placeholder="Article title"
+      value={isPlaceholderTitle ? "" : article.title}
+      maxlength="200"
+    />
+    <textarea
+      class="art-excerpt"
+      id="art-excerpt"
+      placeholder="Short excerpt (shown on cards)"
+      rows="2"
+      maxlength="500">{article.excerpt ?? ""}</textarea>
+
+    <div class="toolbar pixel" id="toolbar">
+      <button type="button" data-cmd="bold" title="Bold"><b>B</b></button>
+      <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
+      <button type="button" data-cmd="strike" title="Strikethrough"><s>S</s></button>
+      <button type="button" data-cmd="code" title="Inline code">&lt;/&gt;</button>
+      <span class="sep"></span>
+      <button type="button" data-cmd="h2" title="Heading 2">H2</button>
+      <button type="button" data-cmd="h3" title="Heading 3">H3</button>
+      <span class="sep"></span>
+      <button type="button" data-cmd="bulletList" title="Bullet list">• List</button>
+      <button type="button" data-cmd="orderedList" title="Numbered list">1. List</button>
+      <button type="button" data-cmd="blockquote" title="Quote">&ldquo; &rdquo;</button>
+      <button type="button" data-cmd="codeBlock" title="Code block">Code</button>
+      <span class="sep"></span>
+      <button type="button" data-cmd="link" title="Link">Link</button>
+      <button type="button" data-cmd="image" title="Image URL">Image</button>
+      <button type="button" data-cmd="hr" title="Divider">HR</button>
+    </div>
+
+    <div class="editor-surface" id="editor"></div>
+
+    <script type="application/json" id="article-body" set:html={bodyJson}></script>
+  </div>
+</Layout>
+
+<script>
+  import { Editor } from "@tiptap/core";
+  import StarterKit from "@tiptap/starter-kit";
+  import Image from "@tiptap/extension-image";
+
+  const app = document.getElementById("editor-app");
+  const mount = document.getElementById("editor");
+  if (app && mount) {
+    const articleId = app.dataset.articleId;
+    const titleInput = document.getElementById("art-title") as HTMLInputElement | null;
+    const excerptInput = document.getElementById("art-excerpt") as HTMLTextAreaElement | null;
+    const status = document.getElementById("save-status");
+    const toolbar = document.getElementById("toolbar");
+    const saveNow = document.getElementById("save-now");
+
+    const EMPTY = { type: "doc", content: [{ type: "paragraph" }] };
+    let initial: unknown = EMPTY;
+    try {
+      initial = JSON.parse(document.getElementById("article-body")?.textContent || "");
+    } catch {
+      initial = EMPTY;
+    }
+
+    const editor = new Editor({
+      element: mount,
+      extensions: [
+        StarterKit.configure({
+          // Underline has no counterpart in the server renderer, so keep it out.
+          underline: false,
+          heading: { levels: [2, 3] },
+          link: {
+            openOnClick: false,
+            autolink: true,
+            HTMLAttributes: { rel: "noopener noreferrer nofollow" },
+          },
+        }),
+        Image,
+      ],
+      content: initial,
+      onUpdate: () => {
+        scheduleSave();
+        refreshToolbar();
+      },
+      onSelectionUpdate: refreshToolbar,
+    });
+
+    const MARK_OR_NODE = [
+      "bold",
+      "italic",
+      "strike",
+      "code",
+      "bulletList",
+      "orderedList",
+      "blockquote",
+      "codeBlock",
+      "link",
+    ];
+    function refreshToolbar() {
+      toolbar?.querySelectorAll<HTMLElement>("[data-cmd]").forEach((btn) => {
+        const cmd = btn.dataset.cmd!;
+        let active = false;
+        if (cmd === "h2") active = editor.isActive("heading", { level: 2 });
+        else if (cmd === "h3") active = editor.isActive("heading", { level: 3 });
+        else if (MARK_OR_NODE.includes(cmd)) active = editor.isActive(cmd);
+        btn.classList.toggle("is-active", active);
+      });
+    }
+
+    toolbar?.querySelectorAll<HTMLElement>("[data-cmd]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const cmd = btn.dataset.cmd;
+        const chain = editor.chain().focus();
+        switch (cmd) {
+          case "bold": chain.toggleBold().run(); break;
+          case "italic": chain.toggleItalic().run(); break;
+          case "strike": chain.toggleStrike().run(); break;
+          case "code": chain.toggleCode().run(); break;
+          case "h2": chain.toggleHeading({ level: 2 }).run(); break;
+          case "h3": chain.toggleHeading({ level: 3 }).run(); break;
+          case "bulletList": chain.toggleBulletList().run(); break;
+          case "orderedList": chain.toggleOrderedList().run(); break;
+          case "blockquote": chain.toggleBlockquote().run(); break;
+          case "codeBlock": chain.toggleCodeBlock().run(); break;
+          case "hr": chain.setHorizontalRule().run(); break;
+          case "link": {
+            const prev = (editor.getAttributes("link").href as string) ?? "";
+            const url = window.prompt("Link URL", prev);
+            if (url === null) { chain.run(); break; }
+            if (url === "") { chain.extendMarkRange("link").unsetLink().run(); break; }
+            chain.extendMarkRange("link").setLink({ href: url }).run();
+            break;
+          }
+          case "image": {
+            const url = window.prompt("Image URL");
+            if (url) chain.setImage({ src: url }).run();
+            else chain.run();
+            break;
+          }
+          default: chain.run();
+        }
+        refreshToolbar();
+      });
+    });
+
+    // ---- Debounced autosave ----
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let dirty = false;
+    let saving = false;
+    const setStatus = (t: string) => { if (status) status.textContent = t; };
+
+    function scheduleSave() {
+      dirty = true;
+      setStatus("Unsaved changes…");
+      clearTimeout(timer);
+      timer = setTimeout(save, 1200);
+    }
+
+    async function save() {
+      if (saving) return;
+      saving = true;
+      dirty = false;
+      setStatus("Saving…");
+      try {
+        const res = await fetch(`/api/articles/${articleId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: titleInput?.value ?? "",
+            excerpt: excerptInput?.value ?? "",
+            body: editor.getJSON(),
+          }),
+        });
+        setStatus(res.ok ? "Saved ✓" : "Save failed — retrying…");
+        if (!res.ok) dirty = true;
+      } catch {
+        setStatus("Save failed (offline?)");
+        dirty = true;
+      } finally {
+        saving = false;
+        if (dirty) scheduleSave();
+      }
+    }
+
+    titleInput?.addEventListener("input", scheduleSave);
+    excerptInput?.addEventListener("input", scheduleSave);
+    saveNow?.addEventListener("click", () => { clearTimeout(timer); save(); });
+    // Flush pending edits when the tab is hidden (navigation / close).
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden" && dirty) save();
+    });
+
+    refreshToolbar();
+  }
+</script>
+
+<style>
+  .editor-page {
+    max-width: 820px;
+    margin-inline: auto;
+    width: 100%;
+  }
+  .back {
+    display: inline-block;
+    font-size: 0.5rem;
+    color: var(--lime);
+    text-decoration: none;
+    margin-bottom: 1rem;
+  }
+  .editor-head {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .tagpill {
+    font-size: 0.4rem;
+    padding: 0.3rem 0.45rem;
+    background: var(--deep-moss);
+    color: var(--phosphor);
+    border: 1px solid var(--lime);
+  }
+  .save-status {
+    font-size: 0.5rem;
+    color: var(--lime);
+    margin-left: auto;
+  }
+  .save-now {
+    cursor: pointer;
+  }
+  .art-title {
+    width: 100%;
+    background: var(--deep-moss);
+    border: 2px solid var(--lime);
+    color: var(--phosphor);
+    font-size: 1.4rem;
+    font-family: "Press Start 2P", monospace;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .art-excerpt {
+    width: 100%;
+    background: var(--deep-moss);
+    border: 2px solid var(--lime);
+    color: var(--phosphor);
+    font-family: inherit;
+    font-size: 0.95rem;
+    padding: 0.6rem;
+    margin-bottom: 1rem;
+    resize: vertical;
+  }
+  .art-title:focus,
+  .art-excerpt:focus {
+    outline: none;
+    border-color: var(--phosphor);
+  }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.5rem;
+    background: var(--forest);
+    border: 2px solid var(--lime);
+    border-bottom: none;
+  }
+  .toolbar button {
+    font-family: "Press Start 2P", monospace;
+    font-size: 0.5rem;
+    color: var(--deep-moss);
+    background: var(--lime);
+    border: 2px solid var(--phosphor);
+    padding: 0.4rem 0.5rem;
+    cursor: pointer;
+  }
+  .toolbar button.is-active {
+    background: var(--phosphor);
+    box-shadow: inset 2px 2px 0 var(--forest);
+  }
+  .toolbar .sep {
+    width: 2px;
+    align-self: stretch;
+    background: var(--lime);
+    margin: 0 0.2rem;
+  }
+
+  .editor-surface {
+    border: 2px solid var(--lime);
+    background: var(--deep-moss);
+    min-height: 360px;
+    padding: 1rem 1.25rem;
+  }
+  /* TipTap is headless — style its editable surface to match the reading view. */
+  .editor-surface :global(.ProseMirror) {
+    outline: none;
+    color: var(--phosphor);
+    line-height: 1.8;
+    min-height: 320px;
+  }
+  .editor-surface :global(.ProseMirror p) {
+    margin: 0 0 1rem;
+  }
+  .editor-surface :global(.ProseMirror h2),
+  .editor-surface :global(.ProseMirror h3) {
+    color: var(--lime);
+    line-height: 1.4;
+  }
+  .editor-surface :global(.ProseMirror a) {
+    color: var(--lime);
+    text-decoration: underline;
+  }
+  .editor-surface :global(.ProseMirror blockquote) {
+    border-left: 3px solid var(--lime);
+    margin: 0 0 1rem;
+    padding-left: 1rem;
+    color: var(--lime);
+  }
+  .editor-surface :global(.ProseMirror pre) {
+    background: var(--ink);
+    padding: 0.75rem;
+    overflow-x: auto;
+  }
+  .editor-surface :global(.ProseMirror code) {
+    font-family: "Press Start 2P", monospace;
+    font-size: 0.75em;
+  }
+  .editor-surface :global(.ProseMirror img) {
+    max-width: 100%;
+    height: auto;
+    border: 2px solid var(--lime);
+  }
+  .editor-surface :global(.ProseMirror hr) {
+    border: none;
+    border-top: 2px dashed var(--lime);
+    margin: 1.5rem 0;
+  }
+</style>

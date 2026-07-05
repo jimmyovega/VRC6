@@ -56,6 +56,33 @@ export function getArticlesByCategory(db: DB, categorySlug: string) {
     .orderBy(desc(schema.articles.publishedAt));
 }
 
+/** An author's own articles (any status), newest-touched first — dashboard list. */
+export function getArticlesByAuthor(db: DB, authorId: string) {
+  return db
+    .select({
+      id: schema.articles.id,
+      title: schema.articles.title,
+      status: schema.articles.status,
+      slug: schema.articles.slug,
+      updatedAt: schema.articles.updatedAt,
+      category: schema.categories.label,
+    })
+    .from(schema.articles)
+    .leftJoin(schema.categories, eq(schema.articles.categoryId, schema.categories.id))
+    .where(eq(schema.articles.authorId, authorId))
+    .orderBy(desc(schema.articles.updatedAt));
+}
+
+/** A single article by id (all fields) — for the editor / permission checks. */
+export async function getArticleById(db: DB, id: number) {
+  const [row] = await db
+    .select()
+    .from(schema.articles)
+    .where(eq(schema.articles.id, id))
+    .limit(1);
+  return row ?? null;
+}
+
 /** A single published article by slug (with author + category), or null. */
 export async function getPublishedArticleBySlug(db: DB, slug: string) {
   const [row] = await db

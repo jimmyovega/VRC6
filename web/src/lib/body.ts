@@ -108,6 +108,23 @@ function renderNode(node: Node): string {
   }
 }
 
+/** Largest accepted serialized body (guards the JSON column against abuse). */
+export const MAX_BODY_BYTES = 512 * 1024;
+
+/**
+ * Is `value` a plausible TipTap document? A light structural check for the
+ * save endpoint — the renderer is defensive, but we don't want to persist
+ * arbitrary JSON in the body column.
+ */
+export function isDocJson(value: unknown): value is Node {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    (value as Node).type === "doc" &&
+    Array.isArray((value as Node).content)
+  );
+}
+
 /** Convert the stored body JSON into a safe HTML string (all text escaped). */
 export function renderBodyToHtml(body: unknown): string {
   const doc = body as Node | null;
