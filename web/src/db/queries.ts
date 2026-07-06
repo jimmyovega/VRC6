@@ -73,6 +73,14 @@ export function getArticlesByAuthor(db: DB, authorId: string) {
     .orderBy(desc(schema.articles.updatedAt));
 }
 
+/** Category options (id + label) for the editor's category picker. */
+export function getCategoryOptions(db: DB) {
+  return db
+    .select({ id: schema.categories.id, label: schema.categories.label })
+    .from(schema.categories)
+    .orderBy(schema.categories.label);
+}
+
 /** A single article by id (all fields) — for the editor / permission checks. */
 export async function getArticleById(db: DB, id: number) {
   const [row] = await db
