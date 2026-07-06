@@ -186,7 +186,7 @@ test("E2E-45 workflow: admin rejects an article back to the author with a reason
 
   // Admin sends it back with a reason.
   await page.context().clearCookies();
-  await signUpAndLogin(page, "creator@vrc6.com"); // ADMIN_EMAIL → admin
+  await signUpAndLogin(page, "owner@vrc6.com"); // in ADMIN_EMAIL (incl. CI) → admin
   await page.goto(`/dashboard/articles/${id}/edit`);
   await page.locator("input[name='reason']").fill("Needs a stronger intro.");
   await page.getByRole("button", { name: "REJECT" }).click();
