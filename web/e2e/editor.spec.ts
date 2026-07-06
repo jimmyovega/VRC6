@@ -139,3 +139,63 @@ test("E2E-43 editor: submit is gated until the draft is complete", async ({ page
   await page.locator("#art-category").selectOption({ index: 1 });
   await expect(submit).toBeEnabled();
 });
+
+// Create a draft, fill it out completely, and submit it. Returns the article id.
+async function writeAndSubmit(page: any, title: string): Promise<number> {
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "+ NEW ARTICLE" }).click();
+  await expect(page.locator("#art-title")).toBeVisible({ timeout: 15_000 });
+  const id = Number(page.url().match(/articles\/(\d+)\/edit/)![1]);
+  await page.locator("#art-title").fill(title);
+  await page.locator(".ProseMirror").click();
+  await page.keyboard.type("This draft has enough real content to be submitted.");
+  await page.locator("#art-category").selectOption({ index: 1 });
+  await expect(page.locator("#save-status")).toHaveText("Saved ✓", { timeout: 10_000 });
+  await page.getByRole("button", { name: "SUBMIT FOR REVIEW" }).click();
+  await expect(page).toHaveURL(`${BASE}/dashboard`);
+  return id;
+}
+
+const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+test("E2E-44 workflow: editor submits, admin approves, article goes public", async ({ page }) => {
+  const title = `Published Piece ${Date.now()}`;
+  await signUpAndLogin(page, `author-${Date.now()}@vrc6.com`);
+  const id = await writeAndSubmit(page, title);
+
+  // Admin finds it in the review queue and approves it.
+  await page.context().clearCookies();
+  await signUpAndLogin(page, "owner@vrc6.com"); // ADMIN_EMAIL → admin on sign-up
+  await page.goto("/admin/review");
+  await expect(page.locator(".review-row", { hasText: title })).toBeVisible();
+  await page.goto(`/dashboard/articles/${id}/edit`);
+  await page.getByRole("button", { name: "APPROVE & PUBLISH" }).click();
+  await expect(page).toHaveURL(`${BASE}/admin/review`);
+
+  // An anonymous visitor can now read it on the public site.
+  await page.context().clearCookies();
+  await page.goto(`/articles/${slugify(title)}`);
+  await expect(page.locator("h1")).toContainText(title);
+  await expect(page.getByText("enough real content to be submitted")).toBeVisible();
+});
+
+test("E2E-45 workflow: admin rejects an article back to the author with a reason", async ({ page }) => {
+  const authorEmail = `rejectee-${Date.now()}@vrc6.com`;
+  await signUpAndLogin(page, authorEmail);
+  const id = await writeAndSubmit(page, `Needs Work ${Date.now()}`);
+
+  // Admin sends it back with a reason.
+  await page.context().clearCookies();
+  await signUpAndLogin(page, "owner@vrc6.com"); // in ADMIN_EMAIL (incl. CI) → admin
+  await page.goto(`/dashboard/articles/${id}/edit`);
+  await page.locator("input[name='reason']").fill("Needs a stronger intro.");
+  await page.getByRole("button", { name: "REJECT" }).click();
+  await expect(page).toHaveURL(`${BASE}/admin/review`);
+
+  // The author sees it back as an editable draft carrying the reason.
+  await page.context().clearCookies();
+  await signUpAndLogin(page, authorEmail);
+  await page.goto(`/dashboard/articles/${id}/edit`);
+  await expect(page.locator(".banner.reject")).toContainText("Needs a stronger intro.");
+  await expect(page.locator(".ProseMirror")).toBeVisible();
+});

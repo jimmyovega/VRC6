@@ -22,6 +22,8 @@ if (!article || !canViewArticle(user, article)) return Astro.redirect("/dashboar
 const editable = canEditArticle(user, article);
 const categories = editable ? await getCategoryOptions(db) : [];
 const blocker = editable ? whyCannotSubmit(article) : null;
+// An admin viewing an article awaiting review gets approve / reject controls.
+const isReviewer = user.role === "admin" && article.status === "pending_review";
 
 // New drafts are stored as a proper TipTap doc; anything else (e.g. a legacy
 // M1 body) opens as a blank canvas rather than mis-parsing.
@@ -58,6 +60,28 @@ const readonlyHtml = editable ? "" : renderBodyToHtml(article.body);
         <p class="banner pixel">
           ✅ Published — <a href={`/articles/${article.slug}`}>view it live</a>.
         </p>
+      )
+    }
+
+    {
+      isReviewer && (
+        <div class="review-bar">
+          <span class="review-label pixel">ADMIN REVIEW</span>
+          <form method="POST" action={`/api/articles/${id}/approve`} class="rev-form">
+            <button class="btn pixel approve-btn" type="submit">APPROVE &amp; PUBLISH</button>
+          </form>
+          <form method="POST" action={`/api/articles/${id}/reject`} class="rev-form reject-form">
+            <input
+              class="reason-input"
+              type="text"
+              name="reason"
+              placeholder="Reason to send back"
+              required
+              maxlength="500"
+            />
+            <button class="btn pixel reject-btn" type="submit">REJECT</button>
+          </form>
+        </div>
       )
     }
 
@@ -475,6 +499,52 @@ const readonlyHtml = editable ? "" : renderBodyToHtml(article.body);
   }
   .banner.reject {
     background: #fca5a5;
+  }
+  .review-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    background: var(--forest);
+    border: 2px solid var(--lime);
+  }
+  .review-label {
+    font-size: 0.5rem;
+    color: var(--lime);
+  }
+  .review-bar form {
+    margin: 0;
+    display: flex;
+    gap: 0.4rem;
+  }
+  .reject-form {
+    flex: 1 1 240px;
+  }
+  .reason-input {
+    flex: 1;
+    min-width: 120px;
+    background: var(--deep-moss);
+    border: 2px solid var(--lime);
+    color: var(--phosphor);
+    padding: 0.4rem 0.5rem;
+    font-family: inherit;
+    font-size: 0.85rem;
+  }
+  .reason-input:focus {
+    outline: none;
+    border-color: var(--phosphor);
+  }
+  .approve-btn,
+  .reject-btn {
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .reject-btn {
+    background: var(--deep-moss);
+    color: #fca5a5;
+    border-color: #fca5a5;
   }
   .cat-field {
     display: flex;
