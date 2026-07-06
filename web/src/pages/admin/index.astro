@@ -3,10 +3,12 @@ import { and, gt, like, ne } from "drizzle-orm";
 import { env } from "cloudflare:workers";
 import Layout from "../../layouts/Layout.astro";
 import { getDb, schema } from "../../db";
+import { getArticlesForReview } from "../../db/queries";
 
 // Admin-only — enforced in middleware.
 const me = Astro.locals.user!;
 const db = getDb(env.DB);
+const pendingReview = await getArticlesForReview(db);
 // Soft-deleted accounts are hidden to keep the list clean; re-inviting their
 // email revives them.
 const users = await db
@@ -38,6 +40,11 @@ const hasLiveLink = new Set(liveTokens.map((t) => t.userId));
   <div class="prose admin">
     <h1 class="page-title pixel">Admin</h1>
     <p>Welcome, <strong>{me.name}</strong>.</p>
+
+    <h2 class="section pixel">REVIEW QUEUE</h2>
+    <a class="btn pixel review-link" href="/admin/review">
+      {pendingReview.length} ARTICLE{pendingReview.length === 1 ? "" : "S"} AWAITING REVIEW →
+    </a>
 
     <h2 class="section pixel">INVITE A USER</h2>
     <form id="invite-form" class="card invite-card">
@@ -230,6 +237,10 @@ const hasLiveLink = new Set(liveTokens.map((t) => t.userId));
   .maint .btn {
     text-decoration: none;
     cursor: pointer;
+  }
+  .review-link {
+    display: inline-block;
+    text-decoration: none;
   }
   .field {
     display: flex;

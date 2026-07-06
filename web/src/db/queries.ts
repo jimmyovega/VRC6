@@ -73,6 +73,23 @@ export function getArticlesByAuthor(db: DB, authorId: string) {
     .orderBy(desc(schema.articles.updatedAt));
 }
 
+/** Articles awaiting review (oldest first — FIFO), with author + category. */
+export function getArticlesForReview(db: DB) {
+  return db
+    .select({
+      id: schema.articles.id,
+      title: schema.articles.title,
+      updatedAt: schema.articles.updatedAt,
+      author: schema.user.name,
+      category: schema.categories.label,
+    })
+    .from(schema.articles)
+    .leftJoin(schema.user, eq(schema.articles.authorId, schema.user.id))
+    .leftJoin(schema.categories, eq(schema.articles.categoryId, schema.categories.id))
+    .where(eq(schema.articles.status, "pending_review"))
+    .orderBy(schema.articles.updatedAt);
+}
+
 /** Category options (id + label) for the editor's category picker. */
 export function getCategoryOptions(db: DB) {
   return db

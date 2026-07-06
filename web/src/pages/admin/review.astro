@@ -1,0 +1,87 @@
+---
+import { env } from "cloudflare:workers";
+import Layout from "../../layouts/Layout.astro";
+import { getDb } from "../../db";
+import { getArticlesForReview } from "../../db/queries";
+import { formatDate } from "../../lib/date";
+
+// Admin-only — enforced in middleware (/admin/*).
+const db = getDb(env.DB);
+const pending = await getArticlesForReview(db);
+---
+
+<Layout title="Review queue — VRC6">
+  <div class="prose review-page">
+    <a class="back" href="/admin">&larr; Back to admin</a>
+    <h1 class="page-title pixel">Review queue</h1>
+    <p class="muted">{pending.length} article{pending.length === 1 ? "" : "s"} awaiting review.</p>
+
+    {
+      pending.length === 0 ? (
+        <p class="muted">Nothing awaiting review right now. 🎉</p>
+      ) : (
+        <ul class="review-list">
+          {pending.map((a) => (
+            <li class="review-row card">
+              <a class="r-title" href={`/dashboard/articles/${a.id}/edit`}>
+                {a.title}
+              </a>
+              <div class="r-meta pixel">
+                <span>By {a.author ?? "—"}</span>
+                {a.category && <span class="r-cat">{a.category}</span>}
+                <span>Submitted {formatDate(a.updatedAt)}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+  </div>
+</Layout>
+
+<style>
+  .review-page {
+    max-width: 720px;
+    margin-inline: auto;
+    width: 100%;
+  }
+  .back {
+    display: inline-block;
+    font-size: 0.5rem;
+    color: var(--lime);
+    text-decoration: none;
+    margin-bottom: 1rem;
+  }
+  .review-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .review-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.85rem 1rem;
+  }
+  .r-title {
+    color: var(--phosphor);
+    text-decoration: none;
+    font-size: 1.05rem;
+  }
+  .r-title:hover {
+    color: var(--lime);
+  }
+  .r-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    font-size: 0.5rem;
+    color: var(--lime);
+  }
+  .r-cat {
+    color: var(--phosphor);
+  }
+</style>
