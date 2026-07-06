@@ -90,3 +90,52 @@ test("E2E-41 editor: cannot open another author's draft", async ({ page }) => {
   await page.goto(`/dashboard/articles/${id}/edit`);
   await expect(page).toHaveURL(`${BASE}/dashboard`);
 });
+
+test("E2E-42 editor: submit a complete draft for review", async ({ page }) => {
+  await signUpAndLogin(page, `submitter-${Date.now()}@vrc6.com`);
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "+ NEW ARTICLE" }).click();
+  await expect(page.locator("#art-title")).toBeVisible({ timeout: 15_000 });
+
+  await page.locator("#art-title").fill("Ready To Ship");
+  await page.locator(".ProseMirror").click();
+  await page.keyboard.type("Enough words to count as real content.");
+  await page.locator("#art-category").selectOption({ index: 1 });
+  await expect(page.locator("#save-status")).toHaveText("Saved ✓", { timeout: 10_000 });
+
+  const submit = page.getByRole("button", { name: "SUBMIT FOR REVIEW" });
+  await expect(submit).toBeEnabled();
+  await submit.click();
+
+  // Redirected to the dashboard, now shown as pending review.
+  await expect(page).toHaveURL(`${BASE}/dashboard`);
+  const row = page.locator(".article-row", { hasText: "Ready To Ship" });
+  await expect(row.locator(".tagpill")).toHaveText("PENDING REVIEW");
+
+  // Reopening is read-only with an "awaiting review" banner (no editor).
+  await row.getByRole("link", { name: "Ready To Ship" }).click();
+  await expect(page.locator(".banner")).toContainText("Submitted for review");
+  await expect(page.locator(".ProseMirror")).toHaveCount(0);
+});
+
+test("E2E-43 editor: submit is gated until the draft is complete", async ({ page }) => {
+  await signUpAndLogin(page, `incomplete-${Date.now()}@vrc6.com`);
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "+ NEW ARTICLE" }).click();
+  await expect(page.locator("#art-title")).toBeVisible({ timeout: 15_000 });
+
+  const submit = page.getByRole("button", { name: "SUBMIT FOR REVIEW" });
+  // Fresh draft: blocked on the title first.
+  await expect(submit).toBeDisabled();
+  await expect(page.locator("#submit-hint")).toContainText("title");
+
+  await page.locator("#art-title").fill("Has A Title");
+  await expect(page.locator("#submit-hint")).toContainText("content");
+
+  await page.locator(".ProseMirror").click();
+  await page.keyboard.type("Now it has content.");
+  await expect(page.locator("#submit-hint")).toContainText("category");
+
+  await page.locator("#art-category").selectOption({ index: 1 });
+  await expect(submit).toBeEnabled();
+});

@@ -52,7 +52,7 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
   if (!article) return json({ error: "Not found" }, 404);
   if (!canEditArticle(actor, article)) return json({ error: "Forbidden" }, 403);
 
-  let payload: { title?: unknown; excerpt?: unknown; body?: unknown };
+  let payload: { title?: unknown; excerpt?: unknown; body?: unknown; categoryId?: unknown };
   try {
     payload = (await request.json()) as typeof payload;
   } catch {
@@ -69,11 +69,23 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
   const excerptRaw = typeof payload.excerpt === "string" ? payload.excerpt.trim().slice(0, MAX_EXCERPT) : "";
   const excerpt = excerptRaw || null;
   const slug = await uniqueSlug(db, title, id, article.slug);
+  // Category: accept a real category id, else clear it. Verify membership so a
+  // bad id can't trip the FK (and to ignore junk input).
+  const catId = Number(payload.categoryId);
+  let categoryId: number | null = null;
+  if (Number.isInteger(catId) && catId > 0) {
+    const [cat] = await db
+      .select({ id: schema.categories.id })
+      .from(schema.categories)
+      .where(eq(schema.categories.id, catId))
+      .limit(1);
+    categoryId = cat ? catId : null;
+  }
   const updatedAt = new Date();
 
   await db
     .update(schema.articles)
-    .set({ title, excerpt, body: payload.body, slug, updatedAt })
+    .set({ title, excerpt, body: payload.body, categoryId, slug, updatedAt })
     .where(eq(schema.articles.id, id));
 
   return json({ ok: true, slug, updatedAt: updatedAt.getTime() });
