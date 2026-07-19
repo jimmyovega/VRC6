@@ -15,6 +15,24 @@ async function postRetry(ctx: any, url: string, data: unknown) {
   return res;
 }
 
+// A page.goto/reload right after a page.request write can hit wrangler dev
+// mid-restart and abort (ERR_ABORTED) — same underlying flakiness as the 5xx
+// case above, just surfacing as a thrown navigation error instead of a status
+// code. Retry it like any other transient dev-server hiccup.
+async function gotoRetry(page: any, url: string) {
+  let lastErr: unknown;
+  for (let i = 0; i < 6; i++) {
+    if (i > 0) await new Promise((r) => setTimeout(r, 1000));
+    try {
+      await page.goto(url);
+      return;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}
+
 // Sign up via a fresh, disposable API context so no leftover session cookie
 // bleeds between users (a shared context would carry the previous signup's
 // session and silently skip creating the next user).
@@ -336,4 +354,87 @@ test("E2E-48 an editor can delete their own draft", async ({ page }) => {
 
   // Gone from the dashboard list.
   await expect(page.locator(".article-row", { hasText: title })).toHaveCount(0);
+});
+
+test("E2E-54 editor dashboard: status filter narrows the list and surfaces a rejection reason", async ({
+  page,
+}) => {
+  const authorEmail = `dashfilter-${Date.now()}@vrc6.com`;
+  await signUpAndLogin(page, authorEmail);
+
+  // A plain, never-submitted draft.
+  const draftTitle = `Untouched Draft ${Date.now()}`;
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "+ NEW ARTICLE" }).click();
+  await expect(page.locator("#art-title")).toBeVisible({ timeout: 15_000 });
+  await page.locator("#art-title").fill(draftTitle);
+  await expect(page.locator("#save-status")).toHaveText("Saved ✓", { timeout: 10_000 });
+
+  // A second draft, submitted then rejected — ends up back as a draft with a reason.
+  const rejectedTitle = `Sent Back ${Date.now()}`;
+  const rejectedId = await writeAndSubmit(page, rejectedTitle);
+  await page.context().clearCookies();
+  await signUpAndLogin(page, "owner@vrc6.com");
+  await page.goto(`/dashboard/articles/${rejectedId}/edit`);
+  await page.locator("input[name='reason']").fill("Needs more detail.");
+  await page.getByRole("button", { name: "REJECT" }).click();
+  await expect(page).toHaveURL(`${BASE}/admin/review`);
+
+  // Back as the author: both drafts show up, and the rejected one carries its
+  // reason prominently on the dashboard row (not just inside the editor).
+  await page.context().clearCookies();
+  await signUpAndLogin(page, authorEmail);
+  await page.goto("/dashboard");
+  await expect(page.locator(".article-row", { hasText: draftTitle })).toBeVisible();
+  await expect(page.locator(".article-row", { hasText: rejectedTitle })).toBeVisible();
+  const rejectedRow = page.locator(".article-row", { hasText: rejectedTitle });
+  await expect(rejectedRow.locator(".a-rejection")).toContainText("Needs more detail.");
+  await expect(page.locator(".article-row", { hasText: draftTitle }).locator(".a-rejection")).toHaveCount(0);
+
+  // Filtering by "pending review" hides both (they're drafts again).
+  await page.locator("select[name='status']").selectOption("pending_review");
+  await page.getByRole("button", { name: "FILTER" }).click();
+  await expect(page.locator(".article-row", { hasText: draftTitle })).toHaveCount(0);
+  await expect(page.locator(".article-row", { hasText: rejectedTitle })).toHaveCount(0);
+
+  // Filtering by "draft" shows both again.
+  await page.goto("/dashboard?status=draft");
+  await expect(page.locator(".article-row", { hasText: draftTitle })).toBeVisible();
+  await expect(page.locator(".article-row", { hasText: rejectedTitle })).toBeVisible();
+});
+
+test("E2E-55 admin dashboard shows content/user counts and recent activity", async ({ page }) => {
+  const authorEmail = `dashstats-${Date.now()}@vrc6.com`;
+  await signUpAndLogin(page, authorEmail);
+
+  // One plain draft, one submitted-for-review.
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "+ NEW ARTICLE" }).click();
+  await expect(page.locator("#art-title")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("#save-status")).toHaveText("Saved ✓", { timeout: 10_000 });
+  const pendingId = await writeAndSubmit(page, `Stats Pending ${Date.now()}`);
+
+  await page.context().clearCookies();
+  await signUpAndLogin(page, "owner@vrc6.com");
+  await page.goto("/admin");
+  const statBox = (label: string) =>
+    page.locator(".stat-box", { hasText: label }).locator(".stat-n");
+  // At least the draft + the pending-review article just created.
+  await expect(page.locator(".stat-n")).toHaveCount(6);
+  expect(Number(await statBox("DRAFTS").textContent())).toBeGreaterThanOrEqual(1);
+  expect(Number(await statBox("PENDING REVIEW").textContent())).toBeGreaterThanOrEqual(1);
+  expect(Number(await statBox("ACTIVE USERS").textContent())).toBeGreaterThanOrEqual(1);
+
+  // Approving bumps PUBLISHED, and recent activity is no longer empty (plenty
+  // of admin actions have already happened by this point in the suite).
+  const approveRes = await page.request.post(`/api/articles/${pendingId}/approve`, { data: {} });
+  expect(approveRes.ok()).toBeTruthy();
+  // A page.request write immediately followed by a page.goto can hang (see
+  // gotoRetry's doc comment) even when the target route was already visited —
+  // a throwaway navigation in between reliably avoids it.
+  await gotoRetry(page, "/");
+  await gotoRetry(page, "/admin");
+  expect(Number(await statBox("PUBLISHED").textContent())).toBeGreaterThanOrEqual(1);
+  await expect(page.getByText("No audit entries yet.")).toHaveCount(0);
+  await expect(page.locator(".activity-row").first()).toBeVisible();
 });

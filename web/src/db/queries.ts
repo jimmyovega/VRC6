@@ -62,8 +62,14 @@ export function getArticlesByCategory(db: DB, categorySlug: string) {
     .orderBy(desc(schema.articles.publishedAt));
 }
 
-/** An author's own articles (any status), newest-touched first — dashboard list. */
-export function getArticlesByAuthor(db: DB, authorId: string) {
+/** An author's own articles (optionally filtered by status), newest-touched first — dashboard list. */
+export function getArticlesByAuthor(
+  db: DB,
+  authorId: string,
+  status?: (typeof schema.ARTICLE_STATUSES)[number],
+) {
+  const conditions = [eq(schema.articles.authorId, authorId), isNull(schema.articles.deletedAt)];
+  if (status) conditions.push(eq(schema.articles.status, status));
   return db
     .select({
       id: schema.articles.id,
@@ -72,10 +78,11 @@ export function getArticlesByAuthor(db: DB, authorId: string) {
       slug: schema.articles.slug,
       updatedAt: schema.articles.updatedAt,
       category: schema.categories.label,
+      rejectionReason: schema.articles.rejectionReason,
     })
     .from(schema.articles)
     .leftJoin(schema.categories, eq(schema.articles.categoryId, schema.categories.id))
-    .where(and(eq(schema.articles.authorId, authorId), isNull(schema.articles.deletedAt)))
+    .where(and(...conditions))
     .orderBy(desc(schema.articles.updatedAt));
 }
 
@@ -140,6 +147,35 @@ export async function getArticlesForAdmin(
   ]);
 
   return { rows, total: totalRows[0]?.total ?? 0 };
+}
+
+/** Non-deleted article counts by status, for the admin dashboard. */
+export async function getArticleStatusCounts(db: DB) {
+  const rows = await db
+    .select({ status: schema.articles.status, n: count() })
+    .from(schema.articles)
+    .where(isNull(schema.articles.deletedAt))
+    .groupBy(schema.articles.status);
+  const counts = Object.fromEntries(schema.ARTICLE_STATUSES.map((s) => [s, 0])) as Record<
+    (typeof schema.ARTICLE_STATUSES)[number],
+    number
+  >;
+  for (const r of rows) counts[r.status] = r.n;
+  return counts;
+}
+
+/** User counts by status, for the admin dashboard. */
+export async function getUserStatusCounts(db: DB) {
+  const rows = await db
+    .select({ status: schema.user.status, n: count() })
+    .from(schema.user)
+    .groupBy(schema.user.status);
+  const counts = Object.fromEntries(schema.USER_STATUSES.map((s) => [s, 0])) as Record<
+    (typeof schema.USER_STATUSES)[number],
+    number
+  >;
+  for (const r of rows) counts[r.status] = r.n;
+  return counts;
 }
 
 /** Authors (non-deleted users) for the admin console's author filter. */
