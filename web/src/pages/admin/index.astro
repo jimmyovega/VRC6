@@ -82,6 +82,11 @@ const hasLiveLink = new Set(liveTokens.map((t) => t.userId));
       {pendingReview.length} ARTICLE{pendingReview.length === 1 ? "" : "S"} AWAITING REVIEW →
     </a>
 
+    <h2 class="section pixel">ALL ARTICLES</h2>
+    <a class="btn pixel review-link" href="/admin/articles">
+      Browse, filter, unpublish, feature, or delete any article →
+    </a>
+
     <h2 class="section pixel">INVITE A USER</h2>
     <form id="invite-form" class="card invite-card">
       <label class="field">
