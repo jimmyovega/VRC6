@@ -264,10 +264,18 @@ test("E2E-53 editor: upload a cover image, it shows on the homepage card and det
   await expect(page.locator("#cover-img")).toBeVisible();
   await expect(page.locator("#cover-remove-btn")).toBeVisible();
 
-  // It renders on the article's own card on the homepage...
+  // It renders on the article's own homepage tile — either the paginated
+  // grid card (.article) or, if this happens to be the newest published
+  // article and nothing else is admin-featured, the hero slot (.featured).
+  // Match on the shared <a class="card"> wrapper so either slot works, and
+  // check the img is present with a real src rather than toBeVisible():
+  // paginated grid cards beyond page 1 are deliberately kept in the DOM
+  // (for crawlability) but hidden via inline display:none, which other
+  // tests running concurrently in CI could push this card behind.
   await page.goto("/");
-  const card = page.locator(".article", { hasText: title });
-  await expect(card.locator(".card-cover img")).toBeVisible();
+  const cardImg = page.locator("a.card", { hasText: title }).locator("img");
+  await expect(cardImg).toHaveCount(1);
+  expect(await cardImg.getAttribute("src")).toBeTruthy();
 
   // ...and on the detail page hero.
   await page.goto(`/articles/${slugify(title)}`);
