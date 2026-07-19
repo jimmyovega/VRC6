@@ -255,9 +255,7 @@ const readonlyHtml = editable ? "" : renderBodyToHtml(article.body);
             break;
           }
           case "image": {
-            const url = window.prompt("Image URL");
-            if (url) chain.setImage({ src: url }).run();
-            else chain.run();
+            pickAndUploadImage();
             break;
           }
           default: chain.run();
@@ -304,6 +302,34 @@ const readonlyHtml = editable ? "" : renderBodyToHtml(article.body);
         saving = false;
         if (dirty) scheduleSave();
       }
+    }
+
+    // Pick a local image file, upload it to R2, and insert the returned URL.
+    function pickAndUploadImage() {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/png,image/jpeg,image/webp,image/gif";
+      input.addEventListener("change", async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        setStatus("Uploading image…");
+        try {
+          const fd = new FormData();
+          fd.append("file", file);
+          const res = await fetch("/api/uploads", { method: "POST", body: fd });
+          if (res.ok) {
+            const { url } = (await res.json()) as { url: string };
+            // setImage fires onUpdate → the new body (with the image) autosaves.
+            editor.chain().focus().setImage({ src: url }).run();
+          } else {
+            const j = (await res.json().catch(() => ({}))) as { error?: string };
+            setStatus(j.error ?? "Image upload failed");
+          }
+        } catch {
+          setStatus("Image upload failed");
+        }
+      });
+      input.click();
     }
 
     // ---- Submit-for-review readiness (mirrors the server's whyCannotSubmit) ----
