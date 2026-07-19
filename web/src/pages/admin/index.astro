@@ -4,11 +4,13 @@ import { env } from "cloudflare:workers";
 import Layout from "../../layouts/Layout.astro";
 import { getDb, schema } from "../../db";
 import { getArticlesForReview } from "../../db/queries";
+import { getMaintenanceStatus } from "../../lib/maintenance";
 
 // Admin-only — enforced in middleware.
 const me = Astro.locals.user!;
 const db = getDb(env.DB);
 const pendingReview = await getArticlesForReview(db);
+const maintenance = await getMaintenanceStatus(db);
 // Soft-deleted accounts are hidden to keep the list clean; re-inviting their
 // email revives them.
 const users = await db
@@ -40,6 +42,40 @@ const hasLiveLink = new Set(liveTokens.map((t) => t.userId));
   <div class="prose admin">
     <h1 class="page-title pixel">Admin</h1>
     <p>Welcome, <strong>{me.name}</strong>.</p>
+
+    <h2 class="section pixel">SITE STATUS</h2>
+    <div class="card site-status">
+      <p class="status-line pixel">
+        Public site is <span class={maintenance.enabled ? "st-on" : "st-off"}>
+          {maintenance.enabled ? "UNDER MAINTENANCE" : "LIVE"}
+        </span>
+      </p>
+      <p class="muted">
+        {maintenance.enabled
+          ? "Anonymous visitors see a “back soon” page. Signed-in users (you, editors) still see the real site."
+          : "Everything you publish is visible to the public immediately. Turn maintenance on before testing on production."}
+      </p>
+      <form id="maintenance-form" class="maint-form">
+        <label class="field">
+          <span class="label pixel">MESSAGE (optional)</span>
+          <input
+            type="text"
+            name="message"
+            maxlength="300"
+            placeholder="VRC6 is doing some quick upkeep. Check back shortly."
+            value={maintenance.message ?? ""}
+          />
+        </label>
+        <button
+          class={`btn pixel ${maintenance.enabled ? "" : "maint-on-btn"}`}
+          type="submit"
+          data-enable={(!maintenance.enabled).toString()}
+        >
+          {maintenance.enabled ? "TURN MAINTENANCE OFF" : "TURN MAINTENANCE ON"}
+        </button>
+      </form>
+      <p class="result pixel" id="maintenance-result" hidden></p>
+    </div>
 
     <h2 class="section pixel">REVIEW QUEUE</h2>
     <a class="btn pixel review-link" href="/admin/review">
@@ -167,6 +203,33 @@ const hasLiveLink = new Set(liveTokens.map((t) => t.userId));
     }
   });
 
+  const maintenanceForm = document.getElementById("maintenance-form") as HTMLFormElement | null;
+  const maintenanceResult = document.getElementById("maintenance-result");
+  maintenanceForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const submitBtn = maintenanceForm.querySelector("button");
+    const enabled = submitBtn?.dataset.enable === "true";
+    const message = String(new FormData(maintenanceForm).get("message") ?? "").trim();
+    const res = await fetch("/api/admin/maintenance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled, message }),
+    });
+    if (!maintenanceResult) return;
+    maintenanceResult.hidden = false;
+    if (res.ok) {
+      maintenanceResult.textContent = enabled
+        ? "Maintenance mode is now ON."
+        : "Maintenance mode is now OFF.";
+      maintenanceResult.classList.remove("err");
+      setTimeout(() => location.reload(), 800);
+    } else {
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      maintenanceResult.textContent = j.error ?? "Could not update maintenance mode.";
+      maintenanceResult.classList.add("err");
+    }
+  });
+
   const expiryBtn = document.getElementById("run-expiry");
   const expiryResult = document.getElementById("expiry-result");
   expiryBtn?.addEventListener("click", async () => {
@@ -272,6 +335,35 @@ const hasLiveLink = new Set(liveTokens.map((t) => t.userId));
   }
   .result.err {
     color: #fca5a5;
+  }
+
+  .site-status {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .status-line {
+    font-size: 0.6rem;
+  }
+  .st-on {
+    color: #fca5a5;
+  }
+  .st-off {
+    color: var(--lime);
+  }
+  .maint-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+    margin: 0;
+  }
+  .maint-form .field {
+    flex: 1 1 260px;
+  }
+  .maint-on-btn {
+    background: #fca5a5;
   }
 
   .users {

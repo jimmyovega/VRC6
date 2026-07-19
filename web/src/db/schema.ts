@@ -168,6 +168,15 @@ export const authRateLimit = sqliteTable("auth_rate_limit", {
   resetAt: integer("reset_at", { mode: "timestamp_ms" }).notNull(),
 });
 
+// Single-row site-wide toggles. Always read/written at id=1; a missing row
+// means every toggle is at its default (off).
+export const siteSettings = sqliteTable("site_settings", {
+  id: integer("id").primaryKey(),
+  maintenanceMode: integer("maintenance_mode", { mode: "boolean" }).notNull().default(false),
+  maintenanceMessage: text("maintenance_message"),
+  updatedAt,
+});
+
 // Append-only trail of user + article actions.
 export const audits = sqliteTable("audits", {
   id: integer("id").primaryKey({ autoIncrement: true }),

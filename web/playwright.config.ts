@@ -3,6 +3,11 @@ import { defineConfig, devices } from "@playwright/test";
 // E2E tests run against a real `wrangler dev` server backed by a freshly
 // migrated + seeded local D1. The webServer command builds, sets up the DB,
 // then serves — so the run is reproducible locally and in CI (no CF secrets).
+//
+// Tests that flip truly global, site-wide state (e.g. maintenance mode) are
+// tagged `@serial` in their title and excluded from this parallel run (see
+// `test:e2e` / `test:e2e:serial` in package.json) — otherwise they'd race
+// unrelated tests hitting the same server from another worker.
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,

@@ -14,7 +14,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e:setup": "npm run build && npm run db:migrate:local && npm run db:seed:local",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test --grep-invert @serial",
+    "test:e2e:serial": "playwright test --grep @serial --workers=1",
     "db:migrate:local": "wrangler d1 migrations apply vrc6-db --local",
     "db:seed:local": "wrangler d1 execute vrc6-db --local --file ./seed.sql"
   },
