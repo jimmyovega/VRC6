@@ -199,3 +199,32 @@ test("E2E-45 workflow: admin rejects an article back to the author with a reason
   await expect(page.locator(".banner.reject")).toContainText("Needs a stronger intro.");
   await expect(page.locator(".ProseMirror")).toBeVisible();
 });
+
+test("E2E-46 editor: uploading an image inserts it and serves it back", async ({ page }) => {
+  await signUpAndLogin(page, `imager-${Date.now()}@vrc6.com`);
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "+ NEW ARTICLE" }).click();
+  await expect(page.locator("#art-title")).toBeVisible({ timeout: 15_000 });
+
+  // A 1x1 transparent PNG, picked through the toolbar's Image button.
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    page.locator('[data-cmd="image"]').click(),
+  ]);
+  await chooser.setFiles({ name: "pixel.png", mimeType: "image/png", buffer: png });
+
+  // The uploaded image is inserted into the editor with a /media URL (dev fallback).
+  const img = page.locator(".ProseMirror img");
+  await expect(img).toHaveCount(1, { timeout: 10_000 });
+  const src = await img.getAttribute("src");
+  expect(src).toMatch(/^\/media\/articles\/[0-9a-f-]{36}\.png$/);
+
+  // And that URL streams the bytes back from R2 with an image content-type.
+  const res = await page.request.get(src!);
+  expect(res.status()).toBe(200);
+  expect(res.headers()["content-type"]).toContain("image/png");
+});
