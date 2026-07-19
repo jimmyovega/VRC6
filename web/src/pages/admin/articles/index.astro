@@ -1,0 +1,291 @@
+---
+import { env } from "cloudflare:workers";
+import Layout from "../../../layouts/Layout.astro";
+import { getDb, schema } from "../../../db";
+import { getArticlesForAdmin, getAuthorOptions, getCategoryOptions } from "../../../db/queries";
+import { formatDate } from "../../../lib/date";
+
+// Admin-only — enforced in middleware (/admin/*).
+const db = getDb(env.DB);
+const PAGE_SIZE = 20;
+
+const params = Astro.url.searchParams;
+const rawStatus = params.get("status");
+const status = (schema.ARTICLE_STATUSES as readonly string[]).includes(rawStatus ?? "")
+  ? (rawStatus as (typeof schema.ARTICLE_STATUSES)[number])
+  : undefined;
+const authorId = params.get("author") || undefined;
+const categoryIdRaw = params.get("category");
+const categoryId = categoryIdRaw && Number.isInteger(Number(categoryIdRaw)) ? Number(categoryIdRaw) : undefined;
+const q = params.get("q")?.trim() || undefined;
+const page = Math.max(1, Number(params.get("page")) || 1);
+
+const [{ rows: articles, total }, authors, categories] = await Promise.all([
+  getArticlesForAdmin(db, { status, authorId, categoryId, q }, PAGE_SIZE, (page - 1) * PAGE_SIZE),
+  getAuthorOptions(db),
+  getCategoryOptions(db),
+]);
+const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+// Preserve the current filters when paging.
+function pageUrl(p: number): string {
+  const u = new URLSearchParams(params);
+  u.set("page", String(p));
+  return `/admin/articles?${u.toString()}`;
+}
+---
+
+<Layout title="All articles — VRC6">
+  <div class="prose console">
+    <a class="back" href="/admin">&larr; Back to admin</a>
+    <h1 class="page-title pixel">All articles</h1>
+    <p class="muted">{total} article{total === 1 ? "" : "s"} match{total === 1 ? "es" : ""} the current filters.</p>
+
+    <form method="GET" action="/admin/articles" class="filters">
+      <select name="status">
+        <option value="">All statuses</option>
+        {
+          schema.ARTICLE_STATUSES.map((s) => (
+            <option value={s} selected={s === status}>
+              {s.replace(/_/g, " ").toUpperCase()}
+            </option>
+          ))
+        }
+      </select>
+      <select name="author">
+        <option value="">All authors</option>
+        {
+          authors.map((a) => (
+            <option value={a.id} selected={a.id === authorId}>
+              {a.name}
+            </option>
+          ))
+        }
+      </select>
+      <select name="category">
+        <option value="">All categories</option>
+        {
+          categories.map((c) => (
+            <option value={c.id} selected={c.id === categoryId}>
+              {c.label}
+            </option>
+          ))
+        }
+      </select>
+      <input type="text" name="q" placeholder="Search title…" value={q ?? ""} />
+      <button class="btn pixel" type="submit">FILTER</button>
+      {(status || authorId || categoryId || q) && (
+        <a class="btn pixel clear-link" href="/admin/articles">CLEAR</a>
+      )}
+    </form>
+
+    {
+      articles.length === 0 ? (
+        <p class="muted">No articles match these filters.</p>
+      ) : (
+        <ul class="article-list">
+          {articles.map((a) => (
+            <li class="article-row card">
+              <div class="a-main">
+                <a class="a-title" href={`/dashboard/articles/${a.id}/edit`}>
+                  {a.title}
+                </a>
+                <div class="a-meta pixel">
+                  <span class={`tagpill st-${a.status}`}>{a.status.replace(/_/g, " ").toUpperCase()}</span>
+                  {a.featured && <span class="tagpill st-featured">FEATURED</span>}
+                  <span>{a.author ?? "—"}</span>
+                  {a.category && <span>{a.category}</span>}
+                  <span>Edited {formatDate(a.updatedAt)}</span>
+                </div>
+              </div>
+              <div class="a-actions">
+                <a class="u-act pixel" href={`/dashboard/articles/${a.id}/edit`}>EDIT</a>
+                {a.status === "published" && (
+                  <form method="POST" action={`/api/articles/${a.id}/unpublish`}>
+                    <button class="u-act pixel" type="submit">UNPUBLISH</button>
+                  </form>
+                )}
+                {a.status === "published" && (
+                  <form method="POST" action={`/api/articles/${a.id}/feature`}>
+                    <input type="hidden" name="featured" value={(!a.featured).toString()} />
+                    <button class="u-act pixel" type="submit">
+                      {a.featured ? "UNFEATURE" : "FEATURE"}
+                    </button>
+                  </form>
+                )}
+                <form method="POST" action={`/api/articles/${a.id}/delete`} class="delete-form">
+                  <button class="u-act danger pixel" type="submit">DELETE</button>
+                </form>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+
+    {
+      totalPages > 1 && (
+        <div class="pager">
+          <a
+            class={`btn pixel ${page <= 1 ? "disabled-link" : ""}`}
+            href={page > 1 ? pageUrl(page - 1) : undefined}
+            aria-disabled={page <= 1}
+          >
+            &laquo; PREV
+          </a>
+          <span class="pixel page-count">
+            PAGE {page} / {totalPages}
+          </span>
+          <a
+            class={`btn pixel ${page >= totalPages ? "disabled-link" : ""}`}
+            href={page < totalPages ? pageUrl(page + 1) : undefined}
+            aria-disabled={page >= totalPages}
+          >
+            NEXT &raquo;
+          </a>
+        </div>
+      )
+    }
+  </div>
+</Layout>
+
+<script>
+  document.querySelectorAll<HTMLFormElement>(".delete-form").forEach((form) => {
+    form.addEventListener("submit", (e) => {
+      if (!confirm("Delete this article?")) e.preventDefault();
+    });
+  });
+</script>
+
+<style>
+  .console {
+    max-width: 900px;
+    margin-inline: auto;
+    width: 100%;
+  }
+  .back {
+    display: inline-block;
+    font-size: 0.5rem;
+    color: var(--lime);
+    text-decoration: none;
+    margin-bottom: 1rem;
+  }
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    margin: 1.25rem 0;
+  }
+  .filters select,
+  .filters input[type="text"] {
+    background: var(--deep-moss);
+    border: 2px solid var(--lime);
+    color: var(--phosphor);
+    padding: 0.5rem;
+    font-family: inherit;
+    font-size: 0.85rem;
+  }
+  .filters input[type="text"] {
+    flex: 1 1 200px;
+  }
+  .clear-link {
+    text-decoration: none;
+  }
+
+  .article-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .article-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+  }
+  .a-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    flex: 1 1 320px;
+    min-width: 0;
+  }
+  .a-title {
+    color: var(--phosphor);
+    text-decoration: none;
+  }
+  .a-title:hover {
+    color: var(--lime);
+  }
+  .a-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.5rem;
+    color: var(--lime);
+  }
+  .tagpill {
+    font-size: 0.4rem;
+    padding: 0.3rem 0.45rem;
+    background: var(--deep-moss);
+    color: var(--phosphor);
+    border: 1px solid var(--lime);
+  }
+  .st-published {
+    color: var(--lime);
+    border-color: var(--lime);
+  }
+  .st-featured {
+    color: var(--deep-moss);
+    background: var(--lime);
+    border-color: var(--phosphor);
+  }
+  .a-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .a-actions form {
+    margin: 0;
+  }
+  .u-act {
+    font-size: 0.4rem;
+    padding: 0.4rem 0.55rem;
+    background: var(--lime);
+    color: var(--deep-moss);
+    border: 2px solid var(--phosphor);
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .u-act.danger {
+    background: var(--deep-moss);
+    color: #fca5a5;
+    border-color: #fca5a5;
+  }
+  .pager {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1.5rem;
+  }
+  .pager .btn {
+    text-decoration: none;
+  }
+  .disabled-link {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+  .page-count {
+    font-size: 0.5rem;
+    color: var(--lime);
+  }
+</style>

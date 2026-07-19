@@ -1,5 +1,5 @@
 // Reusable, typed D1 queries for the public reading experience (M1).
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, count, desc, eq, isNull, like, ne } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "./schema";
 
@@ -92,6 +92,61 @@ export function getArticlesForReview(db: DB) {
     .leftJoin(schema.categories, eq(schema.articles.categoryId, schema.categories.id))
     .where(and(eq(schema.articles.status, "pending_review"), isNull(schema.articles.deletedAt)))
     .orderBy(schema.articles.updatedAt);
+}
+
+export interface ArticleAdminFilters {
+  status?: (typeof schema.ARTICLE_STATUSES)[number];
+  authorId?: string;
+  categoryId?: number;
+  q?: string;
+}
+
+/** All non-deleted articles for the admin console, with filters + pagination. */
+export async function getArticlesForAdmin(
+  db: DB,
+  filters: ArticleAdminFilters,
+  limit: number,
+  offset: number,
+) {
+  const conditions = [isNull(schema.articles.deletedAt)];
+  if (filters.status) conditions.push(eq(schema.articles.status, filters.status));
+  if (filters.authorId) conditions.push(eq(schema.articles.authorId, filters.authorId));
+  if (filters.categoryId != null) conditions.push(eq(schema.articles.categoryId, filters.categoryId));
+  if (filters.q) conditions.push(like(schema.articles.title, `%${filters.q}%`));
+  const where = and(...conditions);
+
+  const [rows, totalRows] = await Promise.all([
+    db
+      .select({
+        id: schema.articles.id,
+        title: schema.articles.title,
+        status: schema.articles.status,
+        slug: schema.articles.slug,
+        featured: schema.articles.featured,
+        updatedAt: schema.articles.updatedAt,
+        author: schema.user.name,
+        category: schema.categories.label,
+      })
+      .from(schema.articles)
+      .leftJoin(schema.user, eq(schema.articles.authorId, schema.user.id))
+      .leftJoin(schema.categories, eq(schema.articles.categoryId, schema.categories.id))
+      .where(where)
+      .orderBy(desc(schema.articles.updatedAt))
+      .limit(limit)
+      .offset(offset),
+    db.select({ total: count() }).from(schema.articles).where(where),
+  ]);
+
+  return { rows, total: totalRows[0]?.total ?? 0 };
+}
+
+/** Authors (non-deleted users) for the admin console's author filter. */
+export function getAuthorOptions(db: DB) {
+  return db
+    .select({ id: schema.user.id, name: schema.user.name })
+    .from(schema.user)
+    .where(ne(schema.user.status, "deleted"))
+    .orderBy(schema.user.name);
 }
 
 /** Category options (id + label) for the editor's category picker. */
