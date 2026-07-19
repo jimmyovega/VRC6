@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { whyCannotSubmit } from "../../src/lib/article";
+import { pickFeaturedArticle, whyCannotSubmit } from "../../src/lib/article";
 
 const doc = (text: string) => ({
   type: "doc",
@@ -24,5 +24,28 @@ describe("whyCannotSubmit", () => {
 
   it("requires a category", () => {
     expect(whyCannotSubmit({ title: "Hi", body: doc("x"), categoryId: null })).toMatch(/category/i);
+  });
+});
+
+describe("pickFeaturedArticle", () => {
+  it("picks the flagged article even when it isn't first (i.e. not the most recent)", () => {
+    const articles = [
+      { id: 1, featured: false },
+      { id: 2, featured: true },
+      { id: 3, featured: false },
+    ];
+    expect(pickFeaturedArticle(articles)).toEqual({ id: 2, featured: true });
+  });
+
+  it("falls back to the first article (most recent) when none is flagged", () => {
+    const articles = [
+      { id: 1, featured: false },
+      { id: 2, featured: false },
+    ];
+    expect(pickFeaturedArticle(articles)).toEqual({ id: 1, featured: false });
+  });
+
+  it("returns undefined for an empty list", () => {
+    expect(pickFeaturedArticle([])).toBeUndefined();
   });
 });
