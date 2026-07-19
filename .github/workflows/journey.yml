@@ -1,0 +1,54 @@
+name: Journey
+
+# The deterministic full-workflow @journey E2E tier (admin invites -> editor
+# activates -> writes -> submits -> admin publishes -> article is public).
+# Excluded from per-PR CI (test:e2e inverts it) since it's slower and touches
+# more surface than any single-feature test; runs nightly + on demand instead.
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  journey:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Provide a throwaway auth secret + admin email for the local E2E server
+        run: |
+          echo "BETTER_AUTH_SECRET=ci-e2e-not-a-real-secret-0123456789abcdef0123456789" > .dev.vars
+          echo "ADMIN_EMAIL=owner@vrc6.com" >> .dev.vars
+          echo "BETTER_AUTH_URL=http://localhost:8788" >> .dev.vars
+          echo "TURNSTILE_DISABLED=1" >> .dev.vars
+          echo "RATE_LIMIT_DISABLED=1" >> .dev.vars
+          echo "EMAIL_DISABLED=1" >> .dev.vars
+
+      - name: Set up local D1 (build + migrate + seed)
+        run: npm run e2e:setup
+
+      - name: Run the @journey full-workflow test
+        run: npm run test:e2e:journey
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-playwright-report
+          path: web/playwright-report/
+          retention-days: 7
