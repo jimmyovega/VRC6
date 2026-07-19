@@ -139,6 +139,10 @@ export const articles = sqliteTable("articles", {
   status: text("status", { enum: ARTICLE_STATUSES }).notNull().default("draft"),
   slug: text("slug").notNull().unique(),
   rejectionReason: text("rejection_reason"),
+  // M4: soft-delete (preserves audit refs; excluded from all list queries) and
+  // a single-at-a-time homepage feature flag.
+  featured: integer("featured", { mode: "boolean" }).notNull().default(false),
+  deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
   createdAt,
   updatedAt,
   publishedAt: integer("published_at", { mode: "timestamp_ms" }),
