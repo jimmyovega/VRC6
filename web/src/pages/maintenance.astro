@@ -1,0 +1,30 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { env } from "cloudflare:workers";
+import { getDb } from "../db";
+import { getMaintenanceStatus } from "../lib/maintenance";
+
+// Reached directly, or via middleware's context.rewrite() while under
+// maintenance. Either way, show the current custom message if one is set.
+const db = getDb(env.DB);
+const { message } = await getMaintenanceStatus(db);
+---
+
+<Layout center title="Down for maintenance — VRC6" description="VRC6 is briefly offline for maintenance.">
+  <div class="maint-page">
+    <h1 class="page-title pixel">Back soon</h1>
+    <p>{message ?? "VRC6 is doing some quick upkeep. Check back shortly."}</p>
+  </div>
+</Layout>
+
+<style>
+  .maint-page {
+    max-width: 480px;
+    margin-inline: auto;
+    text-align: center;
+  }
+  .maint-page p {
+    color: var(--lime);
+    line-height: 1.7;
+  }
+</style>
