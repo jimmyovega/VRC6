@@ -1,16 +1,40 @@
 ---
-import { and, gt, like, ne } from "drizzle-orm";
+import { and, desc, eq, gt, like, ne } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { env } from "cloudflare:workers";
 import Layout from "../../layouts/Layout.astro";
 import { getDb, schema } from "../../db";
-import { getArticlesForReview } from "../../db/queries";
+import { getArticleStatusCounts, getArticlesForReview, getUserStatusCounts } from "../../db/queries";
 import { getMaintenanceStatus } from "../../lib/maintenance";
 
 // Admin-only — enforced in middleware.
 const me = Astro.locals.user!;
 const db = getDb(env.DB);
-const pendingReview = await getArticlesForReview(db);
-const maintenance = await getMaintenanceStatus(db);
+const [pendingReview, maintenance, articleCounts, userCounts] = await Promise.all([
+  getArticlesForReview(db),
+  getMaintenanceStatus(db),
+  getArticleStatusCounts(db),
+  getUserStatusCounts(db),
+]);
+
+// Last few audit entries — same shape as the full /admin/audit page.
+const actorAlias = alias(schema.user, "actor");
+const targetAlias = alias(schema.user, "target");
+const recentActivity = await db
+  .select({
+    id: schema.audits.id,
+    action: schema.audits.action,
+    createdAt: schema.audits.createdAt,
+    actorEmail: actorAlias.email,
+    targetEmail: targetAlias.email,
+  })
+  .from(schema.audits)
+  .leftJoin(actorAlias, eq(schema.audits.actorId, actorAlias.id))
+  .leftJoin(targetAlias, eq(schema.audits.targetUserId, targetAlias.id))
+  .orderBy(desc(schema.audits.createdAt))
+  .limit(5);
+const fmt = (d: Date | null) =>
+  d ? new Date(d).toISOString().replace("T", " ").slice(0, 19) + "Z" : "";
 // Soft-deleted accounts are hidden to keep the list clean; re-inviting their
 // email revives them.
 const users = await db
@@ -42,6 +66,55 @@ const hasLiveLink = new Set(liveTokens.map((t) => t.userId));
   <div class="prose admin">
     <h1 class="page-title pixel">Admin</h1>
     <p>Welcome, <strong>{me.name}</strong>.</p>
+
+    <h2 class="section pixel">CONTENT &amp; USERS</h2>
+    <div class="stats-grid">
+      <div class="stat-box card">
+        <span class="stat-n pixel">{articleCounts.published}</span>
+        <span class="stat-label pixel">PUBLISHED</span>
+      </div>
+      <div class="stat-box card">
+        <span class="stat-n pixel">{articleCounts.pending_review}</span>
+        <span class="stat-label pixel">PENDING REVIEW</span>
+      </div>
+      <div class="stat-box card">
+        <span class="stat-n pixel">{articleCounts.draft}</span>
+        <span class="stat-label pixel">DRAFTS</span>
+      </div>
+      <div class="stat-box card">
+        <span class="stat-n pixel">{userCounts.active}</span>
+        <span class="stat-label pixel">ACTIVE USERS</span>
+      </div>
+      <div class="stat-box card">
+        <span class="stat-n pixel">{userCounts.pending_activation}</span>
+        <span class="stat-label pixel">PENDING INVITES</span>
+      </div>
+      <div class="stat-box card">
+        <span class="stat-n pixel">{userCounts.suspended}</span>
+        <span class="stat-label pixel">SUSPENDED</span>
+      </div>
+    </div>
+
+    <h2 class="section pixel">RECENT ACTIVITY</h2>
+    {
+      recentActivity.length === 0 ? (
+        <p class="muted">No audit entries yet.</p>
+      ) : (
+        <div class="activity">
+          {recentActivity.map((r) => (
+            <div class="activity-row card">
+              <span class="when pixel">{fmt(r.createdAt)}</span>
+              <span class="action pixel">{r.action}</span>
+              <span class="who">
+                {r.actorEmail ?? "system"}
+                {r.targetEmail ? ` → ${r.targetEmail}` : ""}
+              </span>
+            </div>
+          ))}
+        </div>
+      )
+    }
+    <p><a class="btn pixel review-link" href="/admin/audit">VIEW FULL AUDIT LOG →</a></p>
 
     <h2 class="section pixel">SITE STATUS</h2>
     <div class="card site-status">
@@ -170,7 +243,6 @@ const hasLiveLink = new Set(liveTokens.map((t) => t.userId));
     <h2 class="section pixel">MAINTENANCE</h2>
     <div class="maint">
       <button class="btn pixel" id="run-expiry">RUN ACTIVATION EXPIRY</button>
-      <a class="btn pixel" href="/admin/audit">VIEW AUDIT LOG</a>
     </div>
     <p class="result pixel" id="expiry-result" hidden></p>
 
@@ -291,6 +363,55 @@ const hasLiveLink = new Set(liveTokens.map((t) => t.userId));
     font-size: 0.7rem;
     color: var(--lime);
     margin: 1.75rem 0 0.75rem;
+  }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.75rem;
+  }
+  .stat-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.85rem 0.5rem;
+    text-align: center;
+  }
+  .stat-n {
+    font-size: 1.4rem;
+    color: var(--phosphor);
+  }
+  .stat-label {
+    font-size: 0.4rem;
+    color: var(--lime);
+  }
+  .activity {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .activity-row {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: baseline;
+    gap: 0.6rem 0.85rem;
+    padding: 0.6rem 0.85rem;
+  }
+  .activity-row .when {
+    font-size: 0.45rem;
+    color: var(--lime);
+    white-space: nowrap;
+  }
+  .activity-row .action {
+    font-size: 0.5rem;
+    color: var(--phosphor);
+    white-space: nowrap;
+  }
+  .activity-row .who {
+    color: var(--phosphor);
+    font-size: 0.85rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
   .invite-card {
     display: flex;
