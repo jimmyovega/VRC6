@@ -228,3 +228,47 @@ test("E2E-46 editor: uploading an image inserts it and serves it back", async ({
   expect(res.status()).toBe(200);
   expect(res.headers()["content-type"]).toContain("image/png");
 });
+
+test("E2E-47 admin can unpublish a published article (it leaves the public site)", async ({ page }) => {
+  const title = `Unpublish Me ${Date.now()}`;
+  await signUpAndLogin(page, `unpub-author-${Date.now()}@vrc6.com`);
+  const id = await writeAndSubmit(page, title);
+
+  // Admin approves → published + public.
+  await page.context().clearCookies();
+  await signUpAndLogin(page, "owner@vrc6.com");
+  await page.goto(`/dashboard/articles/${id}/edit`);
+  await page.getByRole("button", { name: "APPROVE & PUBLISH" }).click();
+  await expect(page).toHaveURL(`${BASE}/admin/review`);
+  await page.goto(`/articles/${slugify(title)}`);
+  await expect(page.locator("h1")).toContainText(title);
+
+  // Admin unpublishes → back to a draft, and no longer public.
+  await page.goto(`/dashboard/articles/${id}/edit`);
+  await page.getByRole("button", { name: "UNPUBLISH" }).click();
+  await expect(page).toHaveURL(new RegExp(`/dashboard/articles/${id}/edit`));
+  await expect(page.locator(".tagpill")).toHaveText("DRAFT");
+
+  await page.context().clearCookies();
+  const res = await page.request.get(`/articles/${slugify(title)}`);
+  expect(res.status()).toBe(404);
+});
+
+test("E2E-48 an editor can delete their own draft", async ({ page }) => {
+  await signUpAndLogin(page, `deleter-${Date.now()}@vrc6.com`);
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "+ NEW ARTICLE" }).click();
+  await expect(page.locator("#art-title")).toBeVisible({ timeout: 15_000 });
+
+  const title = `Trash Me ${Date.now()}`;
+  await page.locator("#art-title").fill(title);
+  await expect(page.locator("#save-status")).toHaveText("Saved ✓", { timeout: 10_000 });
+
+  // Accept the confirm dialog, then delete.
+  page.on("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "DELETE", exact: true }).click();
+  await expect(page).toHaveURL(`${BASE}/dashboard`);
+
+  // Gone from the dashboard list.
+  await expect(page.locator(".article-row", { hasText: title })).toHaveCount(0);
+});

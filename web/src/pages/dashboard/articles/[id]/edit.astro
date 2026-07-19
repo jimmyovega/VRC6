@@ -137,12 +137,24 @@ const readonlyHtml = editable ? "" : renderBodyToHtml(article.body);
           <div class="editor-surface" id="editor" />
 
           <div class="submit-row">
-            <form method="POST" action={`/api/articles/${id}/submit`} id="submit-form">
-              <button class="btn pixel submit-btn" type="submit" disabled={blocker !== null}>
-                SUBMIT FOR REVIEW
-              </button>
+            {article.status === "draft" && (
+              <form method="POST" action={`/api/articles/${id}/submit`} id="submit-form">
+                <button class="btn pixel submit-btn" type="submit" disabled={blocker !== null}>
+                  SUBMIT FOR REVIEW
+                </button>
+              </form>
+            )}
+            {article.status === "published" && (
+              <form method="POST" action={`/api/articles/${id}/unpublish`}>
+                <button class="btn pixel unpublish-btn" type="submit">UNPUBLISH</button>
+              </form>
+            )}
+            <form method="POST" action={`/api/articles/${id}/delete`} class="delete-form">
+              <button class="btn pixel delete-btn" type="submit">DELETE</button>
             </form>
-            <span class="submit-hint pixel" id="submit-hint">{blocker ?? ""}</span>
+            {article.status === "draft" && (
+              <span class="submit-hint pixel" id="submit-hint">{blocker ?? ""}</span>
+            )}
           </div>
 
           <script type="application/json" id="article-body" set:html={bodyJson} />
@@ -357,6 +369,10 @@ const readonlyHtml = editable ? "" : renderBodyToHtml(article.body);
       clearTimeout(timer);
       await save();
       submitForm.submit(); // form.submit() doesn't refire this handler
+    });
+    // Confirm destructive delete (soft-delete, but still a surprise if misclicked).
+    document.querySelector(".delete-form")?.addEventListener("submit", (e) => {
+      if (!confirm("Delete this article?")) e.preventDefault();
     });
     // Flush pending edits when the tab is hidden (navigation / close).
     document.addEventListener("visibilitychange", () => {
@@ -610,6 +626,18 @@ const readonlyHtml = editable ? "" : renderBodyToHtml(article.body);
   .submit-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+  .submit-row form {
+    margin: 0;
+  }
+  .unpublish-btn,
+  .delete-btn {
+    cursor: pointer;
+  }
+  .delete-btn {
+    background: var(--deep-moss);
+    color: #fca5a5;
+    border-color: #fca5a5;
   }
   .submit-hint {
     font-size: 0.5rem;

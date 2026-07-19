@@ -1,5 +1,5 @@
 // Reusable, typed D1 queries for the public reading experience (M1).
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import * as schema from "./schema";
 
@@ -22,7 +22,7 @@ export function getPublishedArticles(db: DB) {
     .select(cardColumns)
     .from(schema.articles)
     .leftJoin(schema.categories, eq(schema.articles.categoryId, schema.categories.id))
-    .where(eq(schema.articles.status, "published"))
+    .where(and(eq(schema.articles.status, "published"), isNull(schema.articles.deletedAt)))
     .orderBy(desc(schema.articles.publishedAt));
 }
 
@@ -51,7 +51,11 @@ export function getArticlesByCategory(db: DB, categorySlug: string) {
     .from(schema.articles)
     .innerJoin(schema.categories, eq(schema.articles.categoryId, schema.categories.id))
     .where(
-      and(eq(schema.articles.status, "published"), eq(schema.categories.slug, categorySlug)),
+      and(
+        eq(schema.articles.status, "published"),
+        eq(schema.categories.slug, categorySlug),
+        isNull(schema.articles.deletedAt),
+      ),
     )
     .orderBy(desc(schema.articles.publishedAt));
 }
@@ -69,7 +73,7 @@ export function getArticlesByAuthor(db: DB, authorId: string) {
     })
     .from(schema.articles)
     .leftJoin(schema.categories, eq(schema.articles.categoryId, schema.categories.id))
-    .where(eq(schema.articles.authorId, authorId))
+    .where(and(eq(schema.articles.authorId, authorId), isNull(schema.articles.deletedAt)))
     .orderBy(desc(schema.articles.updatedAt));
 }
 
@@ -86,7 +90,7 @@ export function getArticlesForReview(db: DB) {
     .from(schema.articles)
     .leftJoin(schema.user, eq(schema.articles.authorId, schema.user.id))
     .leftJoin(schema.categories, eq(schema.articles.categoryId, schema.categories.id))
-    .where(eq(schema.articles.status, "pending_review"))
+    .where(and(eq(schema.articles.status, "pending_review"), isNull(schema.articles.deletedAt)))
     .orderBy(schema.articles.updatedAt);
 }
 
@@ -103,7 +107,7 @@ export async function getArticleById(db: DB, id: number) {
   const [row] = await db
     .select()
     .from(schema.articles)
-    .where(eq(schema.articles.id, id))
+    .where(and(eq(schema.articles.id, id), isNull(schema.articles.deletedAt)))
     .limit(1);
   return row ?? null;
 }
@@ -120,7 +124,13 @@ export async function getPublishedArticleBySlug(db: DB, slug: string) {
     .from(schema.articles)
     .leftJoin(schema.categories, eq(schema.articles.categoryId, schema.categories.id))
     .leftJoin(schema.user, eq(schema.articles.authorId, schema.user.id))
-    .where(and(eq(schema.articles.slug, slug), eq(schema.articles.status, "published")))
+    .where(
+      and(
+        eq(schema.articles.slug, slug),
+        eq(schema.articles.status, "published"),
+        isNull(schema.articles.deletedAt),
+      ),
+    )
     .limit(1);
   return row ?? null;
 }
