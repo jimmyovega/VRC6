@@ -229,6 +229,63 @@ test("E2E-46 editor: uploading an image inserts it and serves it back", async ({
   expect(res.headers()["content-type"]).toContain("image/png");
 });
 
+test("E2E-53 editor: upload a cover image, it shows on the homepage card and detail hero, and can be removed", async ({
+  page,
+}) => {
+  const title = `Cover Story ${Date.now()}`;
+  await signUpAndLogin(page, `coverer-${Date.now()}@vrc6.com`);
+  const id = await writeAndSubmit(page, title);
+
+  // Admin approves → published + public.
+  await page.context().clearCookies();
+  await signUpAndLogin(page, "owner@vrc6.com");
+  await page.goto(`/dashboard/articles/${id}/edit`);
+  await page.getByRole("button", { name: "APPROVE & PUBLISH" }).click();
+  await expect(page).toHaveURL(`${BASE}/admin/review`);
+
+  // Back in the editor, upload a cover image via the dedicated button.
+  await page.goto(`/dashboard/articles/${id}/edit`);
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    page.locator("#cover-upload-btn").click(),
+  ]);
+  await chooser.setFiles({ name: "cover.png", mimeType: "image/png", buffer: png });
+
+  const coverImg = page.locator("#cover-img");
+  await expect(coverImg).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator("#save-status")).toHaveText("Saved ✓", { timeout: 10_000 });
+
+  // Reload — the cover persisted server-side.
+  await page.reload();
+  await expect(page.locator("#cover-img")).toBeVisible();
+  await expect(page.locator("#cover-remove-btn")).toBeVisible();
+
+  // It renders on the article's own card on the homepage...
+  await page.goto("/");
+  const card = page.locator(".article", { hasText: title });
+  await expect(card.locator(".card-cover img")).toBeVisible();
+
+  // ...and on the detail page hero.
+  await page.goto(`/articles/${slugify(title)}`);
+  await expect(page.locator(".cover-img")).toBeVisible();
+
+  // Remove it — the placeholder/no-cover state returns.
+  await page.goto(`/dashboard/articles/${id}/edit`);
+  await page.locator("#cover-remove-btn").click();
+  await expect(page.locator("#cover-placeholder")).toBeVisible();
+  await expect(page.locator("#save-status")).toHaveText("Saved ✓", { timeout: 10_000 });
+
+  await page.reload();
+  await expect(page.locator("#cover-img")).toBeHidden();
+
+  await page.goto(`/articles/${slugify(title)}`);
+  await expect(page.locator(".cover-img")).toHaveCount(0);
+});
+
 test("E2E-47 admin can unpublish a published article (it leaves the public site)", async ({ page }) => {
   const title = `Unpublish Me ${Date.now()}`;
   await signUpAndLogin(page, `unpub-author-${Date.now()}@vrc6.com`);

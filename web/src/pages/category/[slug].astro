@@ -6,7 +6,9 @@ import Breadcrumb from "../../components/Breadcrumb.astro";
 import Layout from "../../layouts/Layout.astro";
 import { getDb } from "../../db";
 import { getArticlesByCategory, getCategoryBySlug } from "../../db/queries";
+import { mediaUrl } from "../../lib/media";
 
+const mediaEnv = env as typeof env & { MEDIA_BASE_URL?: string };
 const { slug } = Astro.params;
 const db = getDb(env.DB);
 const category = slug ? await getCategoryBySlug(db, slug) : null;
@@ -36,6 +38,7 @@ const articles = await getArticlesByCategory(db, category.slug);
             excerpt={a.excerpt}
             slug={a.slug}
             category={a.category}
+            coverUrl={a.featuredImageKey ? mediaUrl(a.featuredImageKey, mediaEnv.MEDIA_BASE_URL) : null}
           />
         ))}
       </div>

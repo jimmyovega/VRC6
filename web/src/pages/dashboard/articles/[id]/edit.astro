@@ -6,6 +6,9 @@ import { getArticleById, getCategoryOptions } from "../../../../db/queries";
 import { canEditArticle, canViewArticle } from "../../../../lib/permissions";
 import { whyCannotSubmit } from "../../../../lib/article";
 import { isDocJson, renderBodyToHtml } from "../../../../lib/body";
+import { mediaUrl } from "../../../../lib/media";
+
+const mediaEnv = env as typeof env & { MEDIA_BASE_URL?: string };
 
 // Authenticated (middleware gates /dashboard/*); load + authorize the article.
 const user = Astro.locals.user!;
@@ -34,10 +37,11 @@ const isPlaceholderTitle = article.title === "Untitled draft";
 // Escape `<` so the embedded JSON can't break out of the <script> tag.
 const bodyJson = JSON.stringify(initialBody).replace(/</g, "\\u003c");
 const readonlyHtml = editable ? "" : renderBodyToHtml(article.body);
+const coverUrl = article.featuredImageKey ? mediaUrl(article.featuredImageKey, mediaEnv.MEDIA_BASE_URL) : null;
 ---
 
 <Layout title={`${editable ? "Edit" : "View"} — ${article.title} — VRC6`}>
-  <div class="editor-page" id="editor-app" data-article-id={id}>
+  <div class="editor-page" id="editor-app" data-article-id={id} data-cover-key={article.featuredImageKey ?? ""}>
     <a class="back" href="/dashboard">&larr; Back to dashboard</a>
     <div class="editor-head">
       <span class={`tagpill st-${article.status}`}>{article.status.replace(/_/g, " ").toUpperCase()}</span>
@@ -102,6 +106,22 @@ const readonlyHtml = editable ? "" : renderBodyToHtml(article.body);
             placeholder="Short excerpt (shown on cards)"
             rows="2"
             maxlength="500">{article.excerpt ?? ""}</textarea>
+
+          <div class="cover-field">
+            <span class="cover-label pixel">COVER IMAGE</span>
+            <div class="cover-preview">
+              <img src={coverUrl ?? ""} alt="" id="cover-img" hidden={!coverUrl} />
+              <div class="cover-placeholder pixel" id="cover-placeholder" hidden={!!coverUrl}>
+                NO COVER
+              </div>
+            </div>
+            <div class="cover-actions">
+              <button class="btn pixel" type="button" id="cover-upload-btn">UPLOAD COVER</button>
+              <button class="btn pixel cover-remove-btn" type="button" id="cover-remove-btn" hidden={!coverUrl}>
+                REMOVE COVER
+              </button>
+            </div>
+          </div>
 
           <label class="cat-field pixel">
             <span>CATEGORY</span>
@@ -184,6 +204,11 @@ const readonlyHtml = editable ? "" : renderBodyToHtml(article.body);
     const toolbar = document.getElementById("toolbar");
     const saveNow = document.getElementById("save-now");
     const catSelect = document.getElementById("art-category") as HTMLSelectElement | null;
+    const coverImg = document.getElementById("cover-img") as HTMLImageElement | null;
+    const coverPlaceholder = document.getElementById("cover-placeholder");
+    const coverUploadBtn = document.getElementById("cover-upload-btn");
+    const coverRemoveBtn = document.getElementById("cover-remove-btn") as HTMLButtonElement | null;
+    let coverImageKey: string | null = app.dataset.coverKey || null;
     const submitForm = document.getElementById("submit-form") as HTMLFormElement | null;
     const submitBtn = submitForm?.querySelector("button") as HTMLButtonElement | null;
     const submitHint = document.getElementById("submit-hint");
@@ -303,6 +328,7 @@ const readonlyHtml = editable ? "" : renderBodyToHtml(article.body);
             excerpt: excerptInput?.value ?? "",
             body: editor.getJSON(),
             categoryId: catSelect?.value ? Number(catSelect.value) : null,
+            featuredImageKey: coverImageKey,
           }),
         });
         setStatus(res.ok ? "Saved ✓" : "Save failed — retrying…");
@@ -316,33 +342,69 @@ const readonlyHtml = editable ? "" : renderBodyToHtml(article.body);
       }
     }
 
-    // Pick a local image file, upload it to R2, and insert the returned URL.
-    function pickAndUploadImage() {
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = "image/png,image/jpeg,image/webp,image/gif";
-      input.addEventListener("change", async () => {
-        const file = input.files?.[0];
-        if (!file) return;
-        setStatus("Uploading image…");
-        try {
-          const fd = new FormData();
-          fd.append("file", file);
-          const res = await fetch("/api/uploads", { method: "POST", body: fd });
-          if (res.ok) {
-            const { url } = (await res.json()) as { url: string };
-            // setImage fires onUpdate → the new body (with the image) autosaves.
-            editor.chain().focus().setImage({ src: url }).run();
-          } else {
-            const j = (await res.json().catch(() => ({}))) as { error?: string };
-            setStatus(j.error ?? "Image upload failed");
-          }
-        } catch {
-          setStatus("Image upload failed");
-        }
+    // Open a file picker restricted to images; resolves to the chosen file
+    // (or null if the user cancelled).
+    function pickImageFile(): Promise<File | null> {
+      return new Promise((resolve) => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "image/png,image/jpeg,image/webp,image/gif";
+        input.addEventListener("change", () => resolve(input.files?.[0] ?? null));
+        input.click();
       });
-      input.click();
     }
+
+    // Upload a picked file to R2 via the shared endpoint (used for both
+    // inline body images and the cover image below).
+    async function uploadImage(file: File): Promise<{ url: string; key: string } | null> {
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/uploads", { method: "POST", body: fd });
+        if (res.ok) return (await res.json()) as { url: string; key: string };
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        setStatus(j.error ?? "Image upload failed");
+      } catch {
+        setStatus("Image upload failed");
+      }
+      return null;
+    }
+
+    async function pickAndUploadImage() {
+      const file = await pickImageFile();
+      if (!file) return;
+      setStatus("Uploading image…");
+      const result = await uploadImage(file);
+      // setImage fires onUpdate → the new body (with the image) autosaves.
+      if (result) editor.chain().focus().setImage({ src: result.url }).run();
+    }
+
+    function setCoverPreview(url: string | null) {
+      if (coverImg) {
+        coverImg.src = url ?? "";
+        coverImg.hidden = !url;
+      }
+      if (coverPlaceholder) coverPlaceholder.hidden = !!url;
+      if (coverRemoveBtn) coverRemoveBtn.hidden = !url;
+    }
+
+    coverUploadBtn?.addEventListener("click", async () => {
+      const file = await pickImageFile();
+      if (!file) return;
+      setStatus("Uploading cover…");
+      const result = await uploadImage(file);
+      if (result) {
+        coverImageKey = result.key;
+        setCoverPreview(result.url);
+        scheduleSave();
+      }
+    });
+
+    coverRemoveBtn?.addEventListener("click", () => {
+      coverImageKey = null;
+      setCoverPreview(null);
+      scheduleSave();
+    });
 
     // ---- Submit-for-review readiness (mirrors the server's whyCannotSubmit) ----
     function submitBlocker(): string | null {
@@ -584,6 +646,50 @@ const readonlyHtml = editable ? "" : renderBodyToHtml(article.body);
     white-space: nowrap;
   }
   .reject-btn {
+    background: var(--deep-moss);
+    color: #fca5a5;
+    border-color: #fca5a5;
+  }
+  .cover-field {
+    margin-bottom: 1.25rem;
+  }
+  .cover-label {
+    display: block;
+    font-size: 0.5rem;
+    color: var(--lime);
+    margin-bottom: 0.5rem;
+  }
+  .cover-preview {
+    width: 100%;
+    max-width: 320px;
+    aspect-ratio: 16 / 9;
+    background: var(--deep-moss);
+    border: 2px solid var(--lime);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    margin-bottom: 0.6rem;
+  }
+  .cover-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .cover-placeholder {
+    font-size: 0.6rem;
+    color: var(--lime);
+    letter-spacing: 1px;
+  }
+  .cover-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .cover-actions button {
+    cursor: pointer;
+  }
+  .cover-remove-btn {
     background: var(--deep-moss);
     color: #fca5a5;
     border-color: #fca5a5;

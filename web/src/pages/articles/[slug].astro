@@ -10,7 +10,9 @@ import { getDb } from "../../db";
 import { getArticlesByCategory, getPublishedArticleBySlug } from "../../db/queries";
 import { readingTimeMinutes, renderBodyToHtml } from "../../lib/body";
 import { formatDate } from "../../lib/date";
+import { mediaUrl } from "../../lib/media";
 
+const mediaEnv = env as typeof env & { MEDIA_BASE_URL?: string };
 const { slug } = Astro.params;
 const db = getDb(env.DB);
 const article = slug ? await getPublishedArticleBySlug(db, slug) : null;
@@ -19,6 +21,9 @@ if (!article) {
   return Astro.rewrite("/404");
 }
 
+const coverUrl = article.featuredImageKey
+  ? mediaUrl(article.featuredImageKey, mediaEnv.MEDIA_BASE_URL)
+  : null;
 const bodyHtml = renderBodyToHtml(article.body);
 const byline = article.author ?? article.authorUsername ?? "VRC6";
 const dateLabel = formatDate(article.publishedAt);
@@ -70,12 +75,13 @@ const bskyUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(`${ar
     </article>
 
     <aside class="rail">
-      <div class="cover">
-        <div class="cover-img" role="img" aria-label="Cover image placeholder">
-          <span class="pixel">COVER</span>
-        </div>
-        <p class="cover-caption">Cover image · added in M3</p>
-      </div>
+      {
+        coverUrl && (
+          <div class="cover">
+            <img class="cover-img" src={coverUrl} alt="" />
+          </div>
+        )
+      }
 
       <div class="extras">
         <div class="panel">
@@ -190,22 +196,12 @@ const bskyUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(`${ar
   }
 
   .cover-img {
+    display: block;
+    width: 100%;
     aspect-ratio: 4 / 3;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--forest);
+    object-fit: cover;
     border: 2px solid var(--lime);
     box-shadow: 4px 4px 0 var(--phosphor);
-    color: var(--lime);
-    font-size: 0.7rem;
-    letter-spacing: 1px;
-  }
-  .cover-caption {
-    margin: 0.6rem 0 0;
-    font-size: 0.85rem;
-    font-style: italic;
-    color: var(--lime);
   }
 
   .panel {

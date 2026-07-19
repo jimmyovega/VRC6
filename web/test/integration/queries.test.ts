@@ -34,7 +34,7 @@ describe("M1 query helpers (D1)", () => {
     const art = cats.find((c) => c.slug === "art")!;
 
     await db.insert(schema.articles).values([
-      { title: "Live Event", slug: "live-event", status: "published", authorId: author.id, categoryId: events.id, publishedAt: new Date() },
+      { title: "Live Event", slug: "live-event", status: "published", authorId: author.id, categoryId: events.id, publishedAt: new Date(), featuredImageKey: "covers/live-event.jpg" },
       { title: "Draft Event", slug: "draft-event", status: "draft", authorId: author.id, categoryId: events.id },
       { title: "Live Art", slug: "live-art", status: "published", authorId: author.id, categoryId: art.id, publishedAt: new Date() },
     ]);
@@ -45,6 +45,21 @@ describe("M1 query helpers (D1)", () => {
     const rows = await getPublishedArticles(db);
     expect(rows.map((r) => r.slug).sort()).toEqual(["live-art", "live-event"]);
     expect(rows.every((r) => r.category)).toBe(true);
+  });
+
+  it("carries featuredImageKey through the shared card columns", async () => {
+    const db = getDb(env.DB);
+    const rows = await getPublishedArticles(db);
+    expect(rows.find((r) => r.slug === "live-event")?.featuredImageKey).toBe(
+      "covers/live-event.jpg",
+    );
+    expect(rows.find((r) => r.slug === "live-art")?.featuredImageKey).toBeNull();
+
+    const events = await getArticlesByCategory(db, "events");
+    expect(events[0]?.featuredImageKey).toBe("covers/live-event.jpg");
+
+    const article = await getPublishedArticleBySlug(db, "live-event");
+    expect(article?.featuredImageKey).toBe("covers/live-event.jpg");
   });
 
   it("getArticlesByCategory filters by category and excludes drafts", async () => {
