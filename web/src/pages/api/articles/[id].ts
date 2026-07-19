@@ -15,6 +15,7 @@ function json(data: unknown, status = 200) {
 
 const MAX_TITLE = 200;
 const MAX_EXCERPT = 500;
+const MAX_IMAGE_KEY = 300;
 
 // Derive a unique slug from the title, ignoring the article's own row. Falls
 // back to the existing slug when the title has no slug-able characters yet.
@@ -52,7 +53,13 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
   if (!article) return json({ error: "Not found" }, 404);
   if (!canEditArticle(actor, article)) return json({ error: "Forbidden" }, 403);
 
-  let payload: { title?: unknown; excerpt?: unknown; body?: unknown; categoryId?: unknown };
+  let payload: {
+    title?: unknown;
+    excerpt?: unknown;
+    body?: unknown;
+    categoryId?: unknown;
+    featuredImageKey?: unknown;
+  };
   try {
     payload = (await request.json()) as typeof payload;
   } catch {
@@ -81,11 +88,18 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
       .limit(1);
     categoryId = cat ? catId : null;
   }
+  // Cover image: an R2 object key produced by POST /api/uploads (the client
+  // always resends the current key, same as categoryId above — a missing or
+  // non-string value clears it).
+  const featuredImageKey =
+    typeof payload.featuredImageKey === "string" && payload.featuredImageKey.trim()
+      ? payload.featuredImageKey.trim().slice(0, MAX_IMAGE_KEY)
+      : null;
   const updatedAt = new Date();
 
   await db
     .update(schema.articles)
-    .set({ title, excerpt, body: payload.body, categoryId, slug, updatedAt })
+    .set({ title, excerpt, body: payload.body, categoryId, featuredImageKey, slug, updatedAt })
     .where(eq(schema.articles.id, id));
 
   return json({ ok: true, slug, updatedAt: updatedAt.getTime() });

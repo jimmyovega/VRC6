@@ -1,17 +1,26 @@
 ---
 // A standard article card, reused on the home page and category pages.
 // Fixed height with clamped title/excerpt so cards stay uniform regardless of
-// text length.
+// text length. An optional cover thumbnail bleeds to the card's top edge
+// (M4 Phase D).
 interface Props {
   title: string;
   excerpt?: string | null;
   slug: string;
   category?: string | null;
+  coverUrl?: string | null;
 }
-const { title, excerpt, slug, category } = Astro.props;
+const { title, excerpt, slug, category, coverUrl } = Astro.props;
 ---
 
 <a class="card article" href={`/articles/${slug}`}>
+  {
+    coverUrl && (
+      <div class="card-cover">
+        <img src={coverUrl} alt="" loading="lazy" />
+      </div>
+    )
+  }
   {category && <span class="cat pixel">{category}</span>}
   <h3 class="pixel card-title">{title}</h3>
   {excerpt && <p class="card-excerpt">{excerpt}</p>}
@@ -23,6 +32,18 @@ const { title, excerpt, slug, category } = Astro.props;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+  }
+  .card-cover {
+    flex: 0 0 auto;
+    height: 70px;
+    /* bleed to the card's edges (which has 1.25rem padding) */
+    margin: -1.25rem -1.25rem 0.6rem;
+  }
+  .card-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
   }
   .card-title {
     font-size: 0.7rem;

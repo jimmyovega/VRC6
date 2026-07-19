@@ -9,7 +9,9 @@ import Layout from "../layouts/Layout.astro";
 import { getDb } from "../db";
 import { getCategories, getPublishedArticles } from "../db/queries";
 import { pickFeaturedArticle } from "../lib/article";
+import { mediaUrl } from "../lib/media";
 
+const mediaEnv = env as typeof env & { MEDIA_BASE_URL?: string };
 const PER_PAGE = 3;
 
 const db = getDb(env.DB);
@@ -23,6 +25,9 @@ const categories = await getCategories(db);
 const featured = pickFeaturedArticle(published);
 const rest = published.filter((a) => a !== featured);
 const pageCount = Math.max(1, Math.ceil(rest.length / PER_PAGE));
+const featuredCoverUrl = featured?.featuredImageKey
+  ? mediaUrl(featured.featuredImageKey, mediaEnv.MEDIA_BASE_URL)
+  : null;
 ---
 
 <Layout center>
@@ -32,6 +37,11 @@ const pageCount = Math.max(1, Math.ceil(rest.length / PER_PAGE));
       {
         featured && (
           <a class="card featured" href={`/articles/${featured.slug}`}>
+            {featuredCoverUrl && (
+              <div class="feat-cover">
+                <img src={featuredCoverUrl} alt="" loading="eager" />
+              </div>
+            )}
             <span class="tag pixel">FEATURED</span>
             <h2 class="pixel feat-title">{featured.title}</h2>
             <p>{featured.excerpt}</p>
@@ -75,6 +85,7 @@ const pageCount = Math.max(1, Math.ceil(rest.length / PER_PAGE));
                 excerpt={a.excerpt}
                 slug={a.slug}
                 category={a.category}
+                coverUrl={a.featuredImageKey ? mediaUrl(a.featuredImageKey, mediaEnv.MEDIA_BASE_URL) : null}
               />
             </div>
           ))
@@ -177,6 +188,17 @@ const pageCount = Math.max(1, Math.ceil(rest.length / PER_PAGE));
     flex: 1;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+  }
+  .feat-cover {
+    aspect-ratio: 16 / 9;
+    margin: -1.25rem -1.25rem 1rem;
+  }
+  .feat-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
   }
   .feat-title {
     font-size: 1.2rem;
