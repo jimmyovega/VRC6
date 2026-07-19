@@ -425,16 +425,20 @@ test("E2E-55 admin dashboard shows content/user counts and recent activity", asy
   expect(Number(await statBox("PENDING REVIEW").textContent())).toBeGreaterThanOrEqual(1);
   expect(Number(await statBox("ACTIVE USERS").textContent())).toBeGreaterThanOrEqual(1);
 
-  // Approving bumps PUBLISHED, and recent activity is no longer empty (plenty
-  // of admin actions have already happened by this point in the suite).
-  const approveRes = await page.request.post(`/api/articles/${pendingId}/approve`, { data: {} });
-  expect(approveRes.ok()).toBeTruthy();
+  // Reject (rather than approve) to generate a real, self-contained audit
+  // entry for the recent-activity check below without ever touching the
+  // `published` status — approving here would add a new published article
+  // and could shift which seeded article lands on page 2 of the homepage
+  // feed, an unrelated pagination test (E2E-07) elsewhere in the suite.
+  const rejectRes = await page.request.post(`/api/articles/${pendingId}/reject`, {
+    data: { reason: "Not today." },
+  });
+  expect(rejectRes.ok()).toBeTruthy();
   // A page.request write immediately followed by a page.goto can hang (see
   // gotoRetry's doc comment) even when the target route was already visited —
   // a throwaway navigation in between reliably avoids it.
   await gotoRetry(page, "/");
   await gotoRetry(page, "/admin");
-  expect(Number(await statBox("PUBLISHED").textContent())).toBeGreaterThanOrEqual(1);
   await expect(page.getByText("No audit entries yet.")).toHaveCount(0);
   await expect(page.locator(".activity-row").first()).toBeVisible();
 });
