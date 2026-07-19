@@ -19,3 +19,15 @@ export function whyCannotSubmit(article: SubmitCandidate): string | null {
   if (article.categoryId == null) return "Choose a category before submitting.";
   return null;
 }
+
+/**
+ * Pick the homepage hero from a list of published articles (any order): the
+ * admin-curated featured one (M4 Phase C — at most one at a time), or, when
+ * none is set, the first article in the given list. Callers pass articles
+ * already sorted newest-first so the fallback is "most recently published".
+ */
+export function pickFeaturedArticle<T extends { featured: boolean }>(
+  articles: readonly T[],
+): T | undefined {
+  return articles.find((a) => a.featured) ?? articles[0];
+}

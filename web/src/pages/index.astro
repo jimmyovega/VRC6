@@ -8,6 +8,7 @@ import ArticleCard from "../components/ArticleCard.astro";
 import Layout from "../layouts/Layout.astro";
 import { getDb } from "../db";
 import { getCategories, getPublishedArticles } from "../db/queries";
+import { pickFeaturedArticle } from "../lib/article";
 
 const PER_PAGE = 3;
 
@@ -15,7 +16,12 @@ const db = getDb(env.DB);
 const published = await getPublishedArticles(db);
 const categories = await getCategories(db);
 
-const [featured, ...rest] = published;
+// The admin-curated featured article (single at a time — see M4 Phase C)
+// takes the hero slot; with none set, fall back to the most recent published
+// article, matching the pre-featured-flag behavior. Either way the chosen
+// hero is excluded from the paginated feed below it.
+const featured = pickFeaturedArticle(published);
+const rest = published.filter((a) => a !== featured);
 const pageCount = Math.max(1, Math.ceil(rest.length / PER_PAGE));
 ---
 
