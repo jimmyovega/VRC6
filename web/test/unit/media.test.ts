@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { extForType, isAllowedImageType, mediaUrl, newImageKey } from "../../src/lib/media";
+import {
+  DEFAULT_FOCUS,
+  extForType,
+  focusPosition,
+  isAllowedImageType,
+  mediaUrl,
+  newImageKey,
+  parseFocus,
+} from "../../src/lib/media";
 
 describe("media helpers", () => {
   it("accepts the allowed image types and rejects others", () => {
@@ -33,5 +41,23 @@ describe("media helpers", () => {
     );
     expect(mediaUrl("articles/x.png")).toBe("/media/articles/x.png");
     expect(mediaUrl("articles/x.png", "")).toBe("/media/articles/x.png");
+  });
+
+  it("parseFocus normalizes and clamps a focal point, else null", () => {
+    expect(parseFocus("30% 60%")).toBe("30% 60%");
+    expect(parseFocus("30 60")).toBe("30% 60%"); // tolerant of missing %
+    expect(parseFocus("30.7% 59.2%")).toBe("31% 59%"); // rounded
+    expect(parseFocus("-10% 140%")).toBe("0% 100%"); // clamped
+    expect(parseFocus("50%")).toBeNull(); // needs both axes
+    expect(parseFocus("")).toBeNull();
+    expect(parseFocus(null)).toBeNull();
+    expect(parseFocus(42)).toBeNull();
+  });
+
+  it("focusPosition falls back to center for missing/invalid focus", () => {
+    expect(focusPosition("25% 75%")).toBe("25% 75%");
+    expect(focusPosition(null)).toBe(DEFAULT_FOCUS);
+    expect(focusPosition("garbage")).toBe(DEFAULT_FOCUS);
+    expect(DEFAULT_FOCUS).toBe("50% 50%");
   });
 });

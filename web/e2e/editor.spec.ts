@@ -312,6 +312,52 @@ test("E2E-53 editor: upload a cover image, it shows on the homepage card and det
   await expect(page.locator(".cover-img")).toHaveCount(0);
 });
 
+test("E2E-56 editor: panning the cover sets a focal point that persists", async ({ page }) => {
+  const title = `Focus Story ${Date.now()}`;
+  await signUpAndLogin(page, `focuser-${Date.now()}@vrc6.com`);
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "+ NEW ARTICLE" }).click();
+  await expect(page.locator("#art-title")).toBeVisible({ timeout: 15_000 });
+  await page.locator("#art-title").fill(title);
+
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    page.locator("#cover-upload-btn").click(),
+  ]);
+  await chooser.setFiles({ name: "cover.png", mimeType: "image/png", buffer: png });
+
+  const coverImg = page.locator("#cover-img");
+  await expect(coverImg).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator("#save-status")).toHaveText("Saved ✓", { timeout: 10_000 });
+
+  // A fresh upload starts centered, and the small-card guide is shown.
+  await expect(coverImg).toHaveAttribute("style", /object-position:\s*50% 50%/);
+  await expect(page.locator("#cover-guide")).toBeVisible();
+
+  // Drag the preview upward → focal point moves down the image (away from center).
+  const box = (await page.locator("#cover-preview").boundingBox())!;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx, cy - 80, { steps: 8 });
+  await page.mouse.up();
+
+  await expect(coverImg).not.toHaveAttribute("style", /object-position:\s*50% 50%/);
+  await expect(page.locator("#save-status")).toHaveText("Saved ✓", { timeout: 10_000 });
+
+  // The chosen focal point survives a reload (server-rendered from the saved value).
+  await page.reload();
+  await expect(page.locator("#cover-img")).not.toHaveAttribute(
+    "style",
+    /object-position:\s*50% 50%/,
+  );
+});
+
 test("E2E-47 admin can unpublish a published article (it leaves the public site)", async ({ page }) => {
   const title = `Unpublish Me ${Date.now()}`;
   await signUpAndLogin(page, `unpub-author-${Date.now()}@vrc6.com`);

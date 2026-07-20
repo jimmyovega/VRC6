@@ -10,7 +10,7 @@ import { getDb } from "../../db";
 import { getArticlesByCategory, getPublishedArticleBySlug } from "../../db/queries";
 import { readingTimeMinutes, renderBodyToHtml } from "../../lib/body";
 import { formatDate } from "../../lib/date";
-import { mediaUrl } from "../../lib/media";
+import { focusPosition, mediaUrl } from "../../lib/media";
 
 const mediaEnv = env as typeof env & { MEDIA_BASE_URL?: string };
 const { slug } = Astro.params;
@@ -24,6 +24,7 @@ if (!article) {
 const coverUrl = article.featuredImageKey
   ? mediaUrl(article.featuredImageKey, mediaEnv.MEDIA_BASE_URL)
   : null;
+const coverFocus = focusPosition(article.featuredImageFocus);
 const bodyHtml = renderBodyToHtml(article.body);
 const byline = article.author ?? article.authorUsername ?? "VRC6";
 const dateLabel = formatDate(article.publishedAt);
@@ -78,7 +79,7 @@ const bskyUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(`${ar
       {
         coverUrl && (
           <div class="cover">
-            <img class="cover-img" src={coverUrl} alt="" />
+            <img class="cover-img" src={coverUrl} alt="" style={`object-position:${coverFocus}`} />
           </div>
         )
       }

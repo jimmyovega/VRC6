@@ -6,7 +6,7 @@ import { getArticleById, getCategoryOptions } from "../../../../db/queries";
 import { canEditArticle, canViewArticle } from "../../../../lib/permissions";
 import { whyCannotSubmit } from "../../../../lib/article";
 import { isDocJson, renderBodyToHtml } from "../../../../lib/body";
-import { mediaUrl } from "../../../../lib/media";
+import { focusPosition, mediaUrl } from "../../../../lib/media";
 
 const mediaEnv = env as typeof env & { MEDIA_BASE_URL?: string };
 
@@ -38,10 +38,17 @@ const isPlaceholderTitle = article.title === "Untitled draft";
 const bodyJson = JSON.stringify(initialBody).replace(/</g, "\\u003c");
 const readonlyHtml = editable ? "" : renderBodyToHtml(article.body);
 const coverUrl = article.featuredImageKey ? mediaUrl(article.featuredImageKey, mediaEnv.MEDIA_BASE_URL) : null;
+const coverFocusPos = focusPosition(article.featuredImageFocus);
 ---
 
 <Layout title={`${editable ? "Edit" : "View"} — ${article.title} — VRC6`}>
-  <div class="editor-page" id="editor-app" data-article-id={id} data-cover-key={article.featuredImageKey ?? ""}>
+  <div
+    class="editor-page"
+    id="editor-app"
+    data-article-id={id}
+    data-cover-key={article.featuredImageKey ?? ""}
+    data-cover-focus={article.featuredImageFocus ?? ""}
+  >
     <a class="back" href="/dashboard">&larr; Back to dashboard</a>
     <div class="editor-head">
       <span class={`tagpill st-${article.status}`}>{article.status.replace(/_/g, " ").toUpperCase()}</span>
@@ -109,12 +116,25 @@ const coverUrl = article.featuredImageKey ? mediaUrl(article.featuredImageKey, m
 
           <div class="cover-field">
             <span class="cover-label pixel">COVER IMAGE</span>
-            <div class="cover-preview">
-              <img src={coverUrl ?? ""} alt="" id="cover-img" hidden={!coverUrl} />
+            <div class="cover-preview" id="cover-preview">
+              <img
+                src={coverUrl ?? ""}
+                alt=""
+                id="cover-img"
+                hidden={!coverUrl}
+                draggable="false"
+                style={`object-position:${coverFocusPos}`}
+              />
+              {/* Dashed guide = how the smaller article-card crop lands, so you
+                  can frame for both the featured hero and an ordinary card. */}
+              <div class="cover-guide" id="cover-guide" hidden={!coverUrl}></div>
               <div class="cover-placeholder pixel" id="cover-placeholder" hidden={!!coverUrl}>
                 NO COVER
               </div>
             </div>
+            <p class="cover-hint pixel" id="cover-hint" hidden={!coverUrl}>
+              Drag the image to reposition · dashed box = small-card crop
+            </p>
             <div class="cover-actions">
               <button class="btn pixel" type="button" id="cover-upload-btn">UPLOAD COVER</button>
               <button class="btn pixel cover-remove-btn" type="button" id="cover-remove-btn" hidden={!coverUrl}>
@@ -205,10 +225,21 @@ const coverUrl = article.featuredImageKey ? mediaUrl(article.featuredImageKey, m
     const saveNow = document.getElementById("save-now");
     const catSelect = document.getElementById("art-category") as HTMLSelectElement | null;
     const coverImg = document.getElementById("cover-img") as HTMLImageElement | null;
+    const coverPreview = document.getElementById("cover-preview");
     const coverPlaceholder = document.getElementById("cover-placeholder");
+    const coverGuide = document.getElementById("cover-guide");
+    const coverHint = document.getElementById("cover-hint");
     const coverUploadBtn = document.getElementById("cover-upload-btn");
     const coverRemoveBtn = document.getElementById("cover-remove-btn") as HTMLButtonElement | null;
     let coverImageKey: string | null = app.dataset.coverKey || null;
+    // Focal point as [x%, y%]; parsed from the saved "X% Y%" or centered.
+    const parseFocusPair = (s: string | undefined): [number, number] => {
+      const m = (s || "").match(/-?\d+(?:\.\d+)?/g);
+      if (!m || m.length < 2) return [50, 50];
+      const clamp = (n: number) => Math.max(0, Math.min(100, n));
+      return [clamp(Number(m[0])), clamp(Number(m[1]))];
+    };
+    let coverFocus = parseFocusPair(app.dataset.coverFocus);
     const submitForm = document.getElementById("submit-form") as HTMLFormElement | null;
     const submitBtn = submitForm?.querySelector("button") as HTMLButtonElement | null;
     const submitHint = document.getElementById("submit-hint");
@@ -329,6 +360,7 @@ const coverUrl = article.featuredImageKey ? mediaUrl(article.featuredImageKey, m
             body: editor.getJSON(),
             categoryId: catSelect?.value ? Number(catSelect.value) : null,
             featuredImageKey: coverImageKey,
+            featuredImageFocus: coverImageKey ? `${coverFocus[0]}% ${coverFocus[1]}%` : null,
           }),
         });
         setStatus(res.ok ? "Saved ✓" : "Save failed — retrying…");
@@ -379,14 +411,75 @@ const coverUrl = article.featuredImageKey ? mediaUrl(article.featuredImageKey, m
       if (result) editor.chain().focus().setImage({ src: result.url }).run();
     }
 
+    // Representative aspect ratio (width ÷ height) of the small article card's
+    // cover strip — the dashed guide is drawn to this shape so you can frame for
+    // an ordinary card as well as the tall hero.
+    const CARD_AR = 4;
+
+    // Draw the small-card guide band centered on the current vertical focus.
+    function positionGuide() {
+      if (!coverPreview || !coverGuide || coverImg?.hidden) return;
+      const h = coverPreview.clientHeight;
+      const w = coverPreview.clientWidth;
+      if (!h || !w) return;
+      const bandH = Math.min(h, w / CARD_AR);
+      const center = (coverFocus[1] / 100) * h;
+      const top = Math.max(0, Math.min(h - bandH, center - bandH / 2));
+      coverGuide.style.top = `${top}px`;
+      coverGuide.style.height = `${bandH}px`;
+    }
+
+    // Push the current focal point to the preview image + guide.
+    function applyFocus() {
+      if (coverImg) coverImg.style.objectPosition = `${coverFocus[0]}% ${coverFocus[1]}%`;
+      positionGuide();
+    }
+
     function setCoverPreview(url: string | null) {
       if (coverImg) {
         coverImg.src = url ?? "";
         coverImg.hidden = !url;
       }
       if (coverPlaceholder) coverPlaceholder.hidden = !!url;
+      if (coverGuide) coverGuide.hidden = !url;
+      if (coverHint) coverHint.hidden = !url;
       if (coverRemoveBtn) coverRemoveBtn.hidden = !url;
+      applyFocus();
     }
+
+    // ---- Drag-to-pan: translate cursor movement into an object-position focal
+    // point. Moving the image down reveals its top (focus Y → 0), etc. ----
+    let panning = false;
+    let panStartX = 0;
+    let panStartY = 0;
+    let panFocusStart: [number, number] = [50, 50];
+    coverPreview?.addEventListener("pointerdown", (e) => {
+      if (coverImg?.hidden) return;
+      panning = true;
+      panStartX = e.clientX;
+      panStartY = e.clientY;
+      panFocusStart = [coverFocus[0], coverFocus[1]];
+      coverPreview.setPointerCapture(e.pointerId);
+    });
+    coverPreview?.addEventListener("pointermove", (e) => {
+      if (!panning || !coverPreview) return;
+      const w = coverPreview.clientWidth || 1;
+      const h = coverPreview.clientHeight || 1;
+      const clamp = (n: number) => Math.max(0, Math.min(100, n));
+      coverFocus = [
+        Math.round(clamp(panFocusStart[0] - ((e.clientX - panStartX) / w) * 100)),
+        Math.round(clamp(panFocusStart[1] - ((e.clientY - panStartY) / h) * 100)),
+      ];
+      applyFocus();
+    });
+    const endPan = () => {
+      if (!panning) return;
+      panning = false;
+      scheduleSave();
+    };
+    coverPreview?.addEventListener("pointerup", endPan);
+    coverPreview?.addEventListener("pointercancel", endPan);
+    window.addEventListener("resize", positionGuide);
 
     coverUploadBtn?.addEventListener("click", async () => {
       const file = await pickImageFile();
@@ -395,6 +488,7 @@ const coverUrl = article.featuredImageKey ? mediaUrl(article.featuredImageKey, m
       const result = await uploadImage(file);
       if (result) {
         coverImageKey = result.key;
+        coverFocus = [50, 50]; // a fresh image starts centered
         setCoverPreview(result.url);
         scheduleSave();
       }
@@ -402,9 +496,18 @@ const coverUrl = article.featuredImageKey ? mediaUrl(article.featuredImageKey, m
 
     coverRemoveBtn?.addEventListener("click", () => {
       coverImageKey = null;
+      coverFocus = [50, 50];
       setCoverPreview(null);
       scheduleSave();
     });
+
+    // Position the guide for an already-saved cover on load (once the image box
+    // has its dimensions).
+    applyFocus();
+    if (coverImg && !coverImg.hidden) {
+      if (coverImg.complete) positionGuide();
+      coverImg.addEventListener("load", positionGuide);
+    }
 
     // ---- Submit-for-review readiness (mirrors the server's whyCannotSubmit) ----
     function submitBlocker(): string | null {
@@ -659,22 +762,48 @@ const coverUrl = article.featuredImageKey ? mediaUrl(article.featuredImageKey, m
     color: var(--lime);
     margin-bottom: 0.5rem;
   }
+  /* Preview frame mirrors the featured hero's portrait crop; drag the image to
+     set the focal point. The dashed guide shows the smaller article-card crop. */
   .cover-preview {
+    position: relative;
     width: 100%;
-    max-width: 320px;
-    aspect-ratio: 16 / 9;
+    max-width: 300px;
+    aspect-ratio: 4 / 5;
     background: var(--deep-moss);
     border: 2px solid var(--lime);
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    margin-bottom: 0.6rem;
+    margin-bottom: 0.5rem;
+    touch-action: none;
   }
   .cover-preview img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    cursor: grab;
+    user-select: none;
+  }
+  .cover-preview img:active {
+    cursor: grabbing;
+  }
+  .cover-guide {
+    position: absolute;
+    left: 0;
+    right: 0;
+    pointer-events: none;
+    border-top: 2px dashed var(--phosphor);
+    border-bottom: 2px dashed var(--phosphor);
+    box-shadow: 0 0 0 2000px rgba(2, 12, 6, 0.35);
+    mix-blend-mode: normal;
+  }
+  .cover-hint {
+    font-size: 0.4rem;
+    line-height: 1.6;
+    color: var(--lime);
+    margin: 0 0 0.6rem;
+    max-width: 300px;
   }
   .cover-placeholder {
     font-size: 0.6rem;

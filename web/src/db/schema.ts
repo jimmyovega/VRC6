@@ -134,6 +134,10 @@ export const articles = sqliteTable("articles", {
   excerpt: text("excerpt"),
   body: text("body", { mode: "json" }),
   featuredImageKey: text("featured_image_key"), // R2 object key (M3)
+  // CSS object-position focal point for the cover (e.g. "50% 30%"), so the same
+  // image crops sensibly into the hero, the small cards, and the detail rail.
+  // Null = center (M4 cover polish).
+  featuredImageFocus: text("featured_image_focus"),
   authorId: text("author_id").references(() => user.id),
   categoryId: integer("category_id").references(() => categories.id),
   status: text("status", { enum: ARTICLE_STATUSES }).notNull().default("draft"),

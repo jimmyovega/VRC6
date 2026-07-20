@@ -1,0 +1,1 @@
+ALTER TABLE `articles` ADD `featured_image_focus` text;
