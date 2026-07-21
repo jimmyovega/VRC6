@@ -1,8 +1,9 @@
 ---
 // A standard article card, reused on the home page and category pages.
 // Fixed height with clamped title/excerpt so cards stay uniform regardless of
-// text length. An optional cover thumbnail bleeds to the card's top edge
-// (M4 Phase D).
+// text length. With a cover it mirrors the featured hero: the image is a
+// full-bleed, cropped background behind the text under a gradient scrim
+// (M4 Phase D + cover polish). Coverless cards keep the plain layout.
 interface Props {
   title: string;
   excerpt?: string | null;
@@ -14,42 +15,69 @@ interface Props {
 const { title, excerpt, slug, category, coverUrl, coverFocus } = Astro.props;
 ---
 
-<a class="card article" href={`/articles/${slug}`}>
+<a
+  class:list={["card", "article", { "has-cover": !!coverUrl }]}
+  href={`/articles/${slug}`}
+>
   {
     coverUrl && (
-      <div class="card-cover">
-        <img
-          src={coverUrl}
-          alt=""
-          loading="lazy"
-          style={coverFocus ? `object-position:${coverFocus}` : undefined}
-        />
-      </div>
+      <img
+        class="card-cover-img"
+        src={coverUrl}
+        alt=""
+        loading="lazy"
+        style={coverFocus ? `object-position:${coverFocus}` : undefined}
+      />
     )
   }
-  {category && <span class="cat pixel">{category}</span>}
-  <h3 class="pixel card-title">{title}</h3>
-  {excerpt && <p class="card-excerpt">{excerpt}</p>}
+  <div class="card-body">
+    {category && <span class="cat pixel">{category}</span>}
+    <h3 class="pixel card-title">{title}</h3>
+    {excerpt && <p class="card-excerpt">{excerpt}</p>}
+  </div>
 </a>
 
 <style>
   .article {
+    position: relative;
     height: var(--card-h, 165px);
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    padding: 0;
   }
-  .card-cover {
-    flex: 0 0 auto;
-    height: 70px;
-    /* bleed to the card's edges (which has 1.25rem padding) */
-    margin: -1.25rem -1.25rem 0.6rem;
-  }
-  .card-cover img {
+  .card-cover-img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    /* object-position is set inline from the article's stored focal point */
     display: block;
+  }
+  .card-body {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 1.25rem;
+  }
+  /* Coverless: body fills the card, text reads from the top as before. */
+  .article:not(.has-cover) .card-body {
+    flex: 1;
+  }
+  /* With a cover: text sits at the bottom over a scrim so it stays legible. */
+  .article.has-cover {
+    justify-content: flex-end;
+  }
+  .article.has-cover .card-body {
+    padding-top: 2.5rem;
+    background: linear-gradient(
+      to top,
+      rgba(2, 12, 6, 0.92) 0%,
+      rgba(2, 12, 6, 0.78) 55%,
+      rgba(2, 12, 6, 0) 100%
+    );
   }
   .card-title {
     font-size: 0.7rem;
@@ -68,5 +96,12 @@ const { title, excerpt, slug, category, coverUrl, coverFocus } = Astro.props;
     line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+  /* Over an image: lighten the excerpt for legibility and keep it to one line
+     so tag + title + excerpt fit the fixed card height without clipping. */
+  .article.has-cover .card-excerpt {
+    color: var(--phosphor);
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
   }
 </style>
