@@ -411,22 +411,28 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
       if (result) editor.chain().focus().setImage({ src: result.url }).run();
     }
 
-    // Representative aspect ratio (width ÷ height) of the small article card's
-    // cover strip — the dashed guide is drawn to this shape so you can frame for
-    // an ordinary card as well as the tall hero.
-    const CARD_AR = 4;
+    // Representative desktop aspect ratios (width ÷ height): the preview frame
+    // is the hero's crop shape; a small (non-hero) card is wider + shorter.
+    const HERO_AR = 11 / 5; // 2.2 — keep in sync with .cover-preview aspect-ratio
+    const CARD_AR = 3.7; // ~608 / 165 at desktop
 
-    // Draw the small-card guide band centered on the current vertical focus.
+    // Place the small-card guide band. Because object-fit:cover crops a
+    // different-shaped box to a different vertical slice for the same focal
+    // point, the card doesn't share the hero's crop — this draws where the card
+    // actually lands *within* the hero crop the preview shows. Derivation:
+    // band height = HERO_AR/CARD_AR of the preview; band centre offset from the
+    // preview centre = (HERO_AR/CARD_AR − 1)·(0.5 − focusY). (Image-independent.)
     function positionGuide() {
       if (!coverPreview || !coverGuide || coverImg?.hidden) return;
       const h = coverPreview.clientHeight;
-      const w = coverPreview.clientWidth;
-      if (!h || !w) return;
-      const bandH = Math.min(h, w / CARD_AR);
-      const center = (coverFocus[1] / 100) * h;
-      const top = Math.max(0, Math.min(h - bandH, center - bandH / 2));
-      coverGuide.style.top = `${top}px`;
-      coverGuide.style.height = `${bandH}px`;
+      if (!h) return;
+      const p = coverFocus[1] / 100; // focal Y as a fraction
+      const k = HERO_AR / CARD_AR;
+      const heightFrac = Math.min(1, k);
+      const centerFrac = 0.5 + (k - 1) * (0.5 - p);
+      const topFrac = Math.max(0, Math.min(1 - heightFrac, centerFrac - heightFrac / 2));
+      coverGuide.style.top = `${topFrac * h}px`;
+      coverGuide.style.height = `${heightFrac * h}px`;
     }
 
     // Push the current focal point to the preview image + guide.
@@ -764,15 +770,15 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
   }
   /* Preview frame mirrors the featured hero's portrait crop; drag the image to
      set the focal point. The dashed guide shows the smaller article-card crop. */
-  /* The frame matches the featured hero's wide crop (~2.2:1 at desktop), so a
-     tall image overflows top/bottom and you pan up/down to pick the hero crop.
-     The dashed guide inside marks the shorter slice a small (non-hero) card
-     shows. */
+  /* The frame is the featured hero's exact crop shape (~2.2:1 at desktop), so
+     what you frame here is what the hero shows. A tall image overflows
+     top/bottom; pan up/down to pick the crop. The dashed guide marks where a
+     small (non-hero) card — a wider, shorter shape — actually lands. */
   .cover-preview {
     position: relative;
     width: 100%;
     max-width: 440px;
-    aspect-ratio: 9 / 4;
+    aspect-ratio: 11 / 5;
     background: var(--deep-moss);
     border: 2px solid var(--lime);
     display: flex;
