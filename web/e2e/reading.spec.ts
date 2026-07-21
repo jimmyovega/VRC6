@@ -95,14 +95,17 @@ test("E2E-06 empty category shows the empty state", async ({ page }) => {
 test("E2E-07 home feed paginates client-side without a reload", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText(/^1 \/ \d+$/)).toBeVisible();
-  // A page-2 article is in the DOM but hidden on the first page.
-  const pageTwoItem = page.getByRole("heading", {
-    name: "Night Film: Shooting Neon on 35mm",
-  });
+  // Select the first page-2 item structurally (data-page="1"), not by a fixed
+  // seeded title — the exact article that lands on page 2 shifts whenever
+  // another test in the same CI run publishes a new article (newest-first
+  // ordering), which has broken this test twice via unrelated PRs before.
+  const pageTwoItem = page.locator('.feed-item[data-page="1"]').first();
   await expect(pageTwoItem).toBeHidden();
+  const pageTwoTitle = pageTwoItem.locator(".card-title");
   await page.getByRole("button", { name: "More articles" }).click();
   await expect(page.getByText(/^2 \/ \d+$/)).toBeVisible();
   await expect(pageTwoItem).toBeVisible();
+  await expect(pageTwoTitle).toBeVisible();
 });
 
 test("E2E-08 sitemap.xml lists published articles", async ({ page }) => {
