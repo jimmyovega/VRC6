@@ -764,11 +764,15 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
   }
   /* Preview frame mirrors the featured hero's portrait crop; drag the image to
      set the focal point. The dashed guide shows the smaller article-card crop. */
+  /* The frame matches the featured hero's wide crop (~2.2:1 at desktop), so a
+     tall image overflows top/bottom and you pan up/down to pick the hero crop.
+     The dashed guide inside marks the shorter slice a small (non-hero) card
+     shows. */
   .cover-preview {
     position: relative;
     width: 100%;
-    max-width: 300px;
-    aspect-ratio: 4 / 5;
+    max-width: 440px;
+    aspect-ratio: 9 / 4;
     background: var(--deep-moss);
     border: 2px solid var(--lime);
     display: flex;
