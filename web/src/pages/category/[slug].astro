@@ -39,6 +39,7 @@ const articles = await getArticlesByCategory(db, category.slug);
             slug={a.slug}
             category={a.category}
             coverUrl={a.featuredImageKey ? mediaUrl(a.featuredImageKey, mediaEnv.MEDIA_BASE_URL) : null}
+            coverFocus={a.featuredImageFocus}
           />
         ))}
       </div>

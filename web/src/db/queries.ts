@@ -16,6 +16,7 @@ const cardColumns = {
   publishedAt: schema.articles.publishedAt,
   featured: schema.articles.featured,
   featuredImageKey: schema.articles.featuredImageKey,
+  featuredImageFocus: schema.articles.featuredImageFocus,
 };
 
 /** All published articles, newest first (home page). */

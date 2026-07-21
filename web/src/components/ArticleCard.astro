@@ -9,15 +9,21 @@ interface Props {
   slug: string;
   category?: string | null;
   coverUrl?: string | null;
+  coverFocus?: string | null;
 }
-const { title, excerpt, slug, category, coverUrl } = Astro.props;
+const { title, excerpt, slug, category, coverUrl, coverFocus } = Astro.props;
 ---
 
 <a class="card article" href={`/articles/${slug}`}>
   {
     coverUrl && (
       <div class="card-cover">
-        <img src={coverUrl} alt="" loading="lazy" />
+        <img
+          src={coverUrl}
+          alt=""
+          loading="lazy"
+          style={coverFocus ? `object-position:${coverFocus}` : undefined}
+        />
       </div>
     )
   }

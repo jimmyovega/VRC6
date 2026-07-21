@@ -35,3 +35,27 @@ export function mediaUrl(key: string, baseUrl?: string | null): string {
   const base = (baseUrl ?? "").replace(/\/+$/, "");
   return base ? `${base}/${key}` : `/media/${key}`;
 }
+
+/** The center default when no focal point is set. */
+export const DEFAULT_FOCUS = "50% 50%";
+
+/**
+ * Normalize a cover focal point into a safe CSS `object-position` value of the
+ * form "X% Y%", each clamped to 0–100 and rounded. Anything unparseable → null
+ * (the caller treats null as center). Accepts "30% 60%", "30 60", "30%,60%".
+ */
+export function parseFocus(input: unknown): string | null {
+  if (typeof input !== "string") return null;
+  const nums = input.match(/-?\d+(?:\.\d+)?/g);
+  if (!nums || nums.length < 2) return null;
+  const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
+  const x = clamp(Number(nums[0]));
+  const y = clamp(Number(nums[1]));
+  if (Number.isNaN(x) || Number.isNaN(y)) return null;
+  return `${x}% ${y}%`;
+}
+
+/** A ready-to-use `object-position` value for rendering (focus or center). */
+export function focusPosition(focus?: string | null): string {
+  return parseFocus(focus) ?? DEFAULT_FOCUS;
+}

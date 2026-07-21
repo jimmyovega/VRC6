@@ -9,7 +9,7 @@ import Layout from "../layouts/Layout.astro";
 import { getDb } from "../db";
 import { getCategories, getPublishedArticles } from "../db/queries";
 import { pickFeaturedArticle } from "../lib/article";
-import { mediaUrl } from "../lib/media";
+import { focusPosition, mediaUrl } from "../lib/media";
 
 const mediaEnv = env as typeof env & { MEDIA_BASE_URL?: string };
 const PER_PAGE = 3;
@@ -28,6 +28,7 @@ const pageCount = Math.max(1, Math.ceil(rest.length / PER_PAGE));
 const featuredCoverUrl = featured?.featuredImageKey
   ? mediaUrl(featured.featuredImageKey, mediaEnv.MEDIA_BASE_URL)
   : null;
+const featuredCoverFocus = focusPosition(featured?.featuredImageFocus);
 ---
 
 <Layout center>
@@ -36,16 +37,25 @@ const featuredCoverUrl = featured?.featuredImageKey
     <section class="col">
       {
         featured && (
-          <a class="card featured" href={`/articles/${featured.slug}`}>
+          <a
+            class:list={["card", "featured", { "has-cover": !!featuredCoverUrl }]}
+            href={`/articles/${featured.slug}`}
+          >
             {featuredCoverUrl && (
-              <div class="feat-cover">
-                <img src={featuredCoverUrl} alt="" loading="eager" />
-              </div>
+              <img
+                class="feat-cover-img"
+                src={featuredCoverUrl}
+                alt=""
+                loading="eager"
+                style={`object-position:${featuredCoverFocus}`}
+              />
             )}
-            <span class="tag pixel">FEATURED</span>
-            <h2 class="pixel feat-title">{featured.title}</h2>
-            <p>{featured.excerpt}</p>
-            <span class="more pixel">READ MORE &gt;&gt;</span>
+            <div class="feat-body">
+              <span class="tag pixel">FEATURED</span>
+              <h2 class="pixel feat-title">{featured.title}</h2>
+              <p>{featured.excerpt}</p>
+              <span class="more pixel">READ MORE &gt;&gt;</span>
+            </div>
           </a>
         )
       }
@@ -86,6 +96,7 @@ const featuredCoverUrl = featured?.featuredImageKey
                 slug={a.slug}
                 category={a.category}
                 coverUrl={a.featuredImageKey ? mediaUrl(a.featuredImageKey, mediaEnv.MEDIA_BASE_URL) : null}
+                coverFocus={a.featuredImageFocus}
               />
             </div>
           ))
@@ -184,31 +195,66 @@ const featuredCoverUrl = featured?.featuredImageKey
     gap: 1rem;
   }
 
+  /* The hero is a fixed-size card. Its cover (when present) is a full-bleed,
+     cropped background layer behind the text — so a tall/huge image can never
+     stretch the card; it's always clipped to this box via object-fit + the
+     focal point set in the editor. */
   .featured {
+    position: relative;
     flex: 1;
+    min-height: 340px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    padding: 0;
   }
-  .feat-cover {
-    aspect-ratio: 16 / 9;
-    margin: -1.25rem -1.25rem 1rem;
+  /* With a cover the text sits at the bottom over the scrim; coverless keeps
+     the original top-aligned layout (READ MORE pushed to the bottom). */
+  .featured.has-cover {
+    justify-content: flex-end;
   }
-  .feat-cover img {
+  .feat-cover-img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    /* object-position is set inline from the article's stored focal point */
     display: block;
+  }
+  .feat-body {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 1.25rem;
+  }
+  .featured.has-cover .feat-body {
+    flex: 0 0 auto;
+  }
+  /* A scrim so the pixel text stays legible over any image. Only when there's
+     a cover — a coverless hero keeps the plain card background. */
+  .featured.has-cover .feat-body {
+    padding-top: 3rem;
+    background: linear-gradient(
+      to top,
+      rgba(2, 12, 6, 0.92) 0%,
+      rgba(2, 12, 6, 0.75) 45%,
+      rgba(2, 12, 6, 0) 100%
+    );
+  }
+  .featured.has-cover .feat-body p {
+    color: var(--phosphor);
   }
   .feat-title {
     font-size: 1.2rem;
     line-height: 1.6;
     margin: 0 0 0.75rem;
   }
-  /* push "READ MORE" to the bottom so the featured card fills the column height */
   .more {
     display: block;
-    margin-top: auto;
+    margin-top: 0.75rem;
     font-size: 0.5rem;
     color: var(--lime);
   }

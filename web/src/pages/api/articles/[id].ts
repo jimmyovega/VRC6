@@ -4,6 +4,7 @@ import { env } from "cloudflare:workers";
 import { getDb, schema } from "../../../db";
 import { canEditArticle } from "../../../lib/permissions";
 import { isDocJson, MAX_BODY_BYTES } from "../../../lib/body";
+import { parseFocus } from "../../../lib/media";
 import { slugify } from "../../../lib/text";
 
 function json(data: unknown, status = 200) {
@@ -59,6 +60,7 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
     body?: unknown;
     categoryId?: unknown;
     featuredImageKey?: unknown;
+    featuredImageFocus?: unknown;
   };
   try {
     payload = (await request.json()) as typeof payload;
@@ -95,11 +97,23 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
     typeof payload.featuredImageKey === "string" && payload.featuredImageKey.trim()
       ? payload.featuredImageKey.trim().slice(0, MAX_IMAGE_KEY)
       : null;
+  // Cover focal point ("X% Y%" object-position). Cleared when there's no cover,
+  // so a stale focus can't linger on a removed image.
+  const featuredImageFocus = featuredImageKey ? parseFocus(payload.featuredImageFocus) : null;
   const updatedAt = new Date();
 
   await db
     .update(schema.articles)
-    .set({ title, excerpt, body: payload.body, categoryId, featuredImageKey, slug, updatedAt })
+    .set({
+      title,
+      excerpt,
+      body: payload.body,
+      categoryId,
+      featuredImageKey,
+      featuredImageFocus,
+      slug,
+      updatedAt,
+    })
     .where(eq(schema.articles.id, id));
 
   return json({ ok: true, slug, updatedAt: updatedAt.getTime() });
