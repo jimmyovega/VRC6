@@ -48,7 +48,12 @@ async function setFeatured(id: number, featured: boolean) {
 test("E2E-01 home lists published articles and category chips", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveTitle(/VRC6/);
-  await expect(page.getByText("The Digital Underground", { exact: false })).toBeVisible();
+  // Check structurally (feed's first page has a real, visible article title)
+  // rather than a fixed seeded title — which page any specific article lands
+  // on shifts whenever another test in the same CI run publishes a new one
+  // (newest-first homepage ordering); this has broken title-based assertions
+  // here and in E2E-07 before.
+  await expect(page.locator('.feed-item[data-page="0"] .card-title').first()).toBeVisible();
   // exact:true so the all-caps chip matches only itself, not article cards
   // whose accessible name also contains "Photography".
   await expect(page.getByRole("link", { name: "PHOTOGRAPHY", exact: true })).toBeVisible();
