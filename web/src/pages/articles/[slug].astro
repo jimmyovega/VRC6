@@ -195,6 +195,17 @@ const bskyUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(`${ar
     font-style: italic;
     margin-bottom: 1.5rem;
   }
+  /* Body content is raw HTML from renderBodyToHtml (see lib/body.ts) — style
+     it via :global() since Astro doesn't scope injected markup. Images must
+     be capped to the prose column (they carry their natural pixel size) and
+     get the same green border as the editor's ProseMirror surface. */
+  .body :global(img) {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border: 2px solid var(--lime);
+    margin: 1.25rem 0;
+  }
 
   .cover-img {
     display: block;
