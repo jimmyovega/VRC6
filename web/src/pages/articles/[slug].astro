@@ -206,6 +206,17 @@ const bskyUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(`${ar
     border: 2px solid var(--lime);
     margin: 1.25rem 0;
   }
+  /* Alignment (renderer emits data-align on the img / text-align inline style
+     on paragraphs+headings — see lib/body.ts). Only visible on an image
+     narrower than the column; a full-width image has no room to shift. */
+  .body :global(img[data-align="center"]) {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .body :global(img[data-align="right"]) {
+    margin-left: auto;
+    margin-right: 0;
+  }
 
   .cover-img {
     display: block;

@@ -590,3 +590,56 @@ test("E2E-57 a large inline body image is constrained to the prose column, not o
   const borderColor = await img.evaluate((el) => getComputedStyle(el).borderTopColor);
   expect(borderColor).toBe("rgb(74, 222, 128)"); // --lime
 });
+
+test("E2E-58 editor: aligns a paragraph and an image, both render aligned on the public page", async ({
+  page,
+}) => {
+  const title = `Aligned Story ${Date.now()}`;
+  await signUpAndLogin(page, `aligner-${Date.now()}@vrc6.com`);
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "+ NEW ARTICLE" }).click();
+  await expect(page.locator("#art-title")).toBeVisible({ timeout: 15_000 });
+  await page.locator("#art-title").fill(title);
+
+  await page.locator(".ProseMirror").click();
+  await page.keyboard.type("Centered paragraph text.");
+  await page.locator('[data-cmd="alignCenter"]').click();
+  await expect(page.locator('[data-cmd="alignCenter"]')).toHaveClass(/is-active/);
+
+  // A new paragraph, then a right-aligned image in it. (Enter must not
+  // steal focus to the alignCenter button — see the toolbar's mousedown
+  // preventDefault, which is exactly what this exercises.)
+  await page.keyboard.press("Enter");
+  const png = makePng(400, 300, [30, 140, 220]);
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    page.locator('[data-cmd="image"]').click(),
+  ]);
+  await chooser.setFiles({ name: "align.png", mimeType: "image/png", buffer: png });
+  const editorImg = page.locator(".ProseMirror img");
+  await expect(editorImg).toHaveCount(1, { timeout: 10_000 });
+  await editorImg.click(); // select the image node
+  await page.locator('[data-cmd="alignRight"]').click();
+  await expect(page.locator('[data-cmd="alignRight"]')).toHaveClass(/is-active/);
+
+  await page.locator("#art-category").selectOption({ index: 1 });
+  await expect(page.locator("#save-status")).toHaveText("Saved ✓", { timeout: 10_000 });
+  await page.getByRole("button", { name: "SUBMIT FOR REVIEW" }).click();
+  await expect(page).toHaveURL(`${BASE}/dashboard`);
+
+  await page.context().clearCookies();
+  await signUpAndLogin(page, "owner@vrc6.com");
+  await gotoRetry(page, "/admin/review");
+  await page.locator(".review-row", { hasText: title }).getByRole("link", { name: title }).click();
+  await page.getByRole("button", { name: "APPROVE & PUBLISH" }).click();
+  await expect(page).toHaveURL(`${BASE}/admin/review`);
+
+  await page.context().clearCookies();
+  await gotoRetry(page, `/articles/${slugify(title)}`);
+  const centeredP = page.locator(".body p", { hasText: "Centered paragraph text." });
+  await expect(centeredP).toHaveCSS("text-align", "center");
+  const publicImg = page.locator(".body img");
+  await expect(publicImg).toHaveAttribute("data-align", "right");
+  // align:right resolves to margin-left:auto (some computed px) + margin-right:0.
+  await expect(publicImg).toHaveCSS("margin-right", "0px");
+});

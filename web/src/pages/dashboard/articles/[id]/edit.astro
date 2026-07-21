@@ -172,6 +172,10 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
             <button type="button" data-cmd="link" title="Link">Link</button>
             <button type="button" data-cmd="image" title="Image URL">Image</button>
             <button type="button" data-cmd="hr" title="Divider">HR</button>
+            <span class="sep" />
+            <button type="button" data-cmd="alignLeft" title="Align left">L</button>
+            <button type="button" data-cmd="alignCenter" title="Align center">C</button>
+            <button type="button" data-cmd="alignRight" title="Align right">R</button>
           </div>
 
           <div class="editor-surface" id="editor" />
@@ -212,7 +216,28 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
 <script>
   import { Editor } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
-  import Image from "@tiptap/extension-image";
+  import BaseImage from "@tiptap/extension-image";
+  import TextAlign from "@tiptap/extension-text-align";
+
+  // Server renderer (lib/body.ts) only understands these three; "justify" is
+  // deliberately excluded from the extension's allowlist below.
+  const ALIGNMENTS = ["left", "center", "right"] as const;
+
+  // Add an `align` attribute to the built-in Image node (rendered as
+  // data-align, matching the pattern used for the cover's focal point style).
+  const Image = BaseImage.extend({
+    addAttributes() {
+      return {
+        ...this.parent?.(),
+        align: {
+          default: null,
+          parseHTML: (el: HTMLElement) => el.getAttribute("data-align"),
+          renderHTML: (attrs: { align?: string | null }) =>
+            attrs.align ? { "data-align": attrs.align } : {},
+        },
+      };
+    },
+  });
 
   const app = document.getElementById("editor-app");
   const mount = document.getElementById("editor");
@@ -266,6 +291,11 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
           },
         }),
         Image,
+        TextAlign.configure({
+          types: ["paragraph", "heading"],
+          alignments: [...ALIGNMENTS],
+          defaultAlignment: null,
+        }),
       ],
       content: initial,
       onUpdate: () => {
@@ -287,16 +317,33 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
       "codeBlock",
       "link",
     ];
+    const ALIGN_CMDS: Record<string, (typeof ALIGNMENTS)[number]> = {
+      alignLeft: "left",
+      alignCenter: "center",
+      alignRight: "right",
+    };
     function refreshToolbar() {
       toolbar?.querySelectorAll<HTMLElement>("[data-cmd]").forEach((btn) => {
         const cmd = btn.dataset.cmd!;
         let active = false;
         if (cmd === "h2") active = editor.isActive("heading", { level: 2 });
         else if (cmd === "h3") active = editor.isActive("heading", { level: 3 });
-        else if (MARK_OR_NODE.includes(cmd)) active = editor.isActive(cmd);
+        else if (cmd in ALIGN_CMDS) {
+          const a = ALIGN_CMDS[cmd];
+          active = editor.isActive({ textAlign: a }) || editor.isActive("image", { align: a });
+        } else if (MARK_OR_NODE.includes(cmd)) active = editor.isActive(cmd);
         btn.classList.toggle("is-active", active);
       });
     }
+
+    // Prevent the browser's native click-focuses-the-button behavior, which
+    // would steal DOM focus from the editor right after our handler's
+    // chain.focus() restores it — otherwise a keystroke immediately following
+    // a toolbar click (e.g. pressing Enter right after aligning a paragraph,
+    // to keep writing) lands on the button instead of the editor.
+    toolbar?.addEventListener("mousedown", (e) => {
+      if ((e.target as HTMLElement).closest("[data-cmd]")) e.preventDefault();
+    });
 
     toolbar?.querySelectorAll<HTMLElement>("[data-cmd]").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -314,6 +361,20 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
           case "blockquote": chain.toggleBlockquote().run(); break;
           case "codeBlock": chain.toggleCodeBlock().run(); break;
           case "hr": chain.setHorizontalRule().run(); break;
+          case "alignLeft":
+          case "alignCenter":
+          case "alignRight": {
+            const alignment = ALIGN_CMDS[cmd];
+            if (editor.isActive("image")) {
+              // Toggle off (back to the default/left) on a second click, same
+              // feel as the text-align toggle command below.
+              const current = editor.getAttributes("image").align;
+              chain.updateAttributes("image", { align: current === alignment ? null : alignment }).run();
+            } else {
+              chain.toggleTextAlign(alignment).run();
+            }
+            break;
+          }
           case "link": {
             const prev = (editor.getAttributes("link").href as string) ?? "";
             const url = window.prompt("Link URL", prev);
@@ -687,9 +748,22 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
     font-size: 0.75em;
   }
   .editor-surface :global(.ProseMirror img) {
+    display: block;
     max-width: 100%;
     height: auto;
     border: 2px solid var(--lime);
+    margin: 0.5rem 0;
+  }
+  /* Alignment: center/right use auto margins; the base rule above is the
+     left/default case. Only visible when the image is narrower than the
+     column — a full-width image has no room to shift. */
+  .editor-surface :global(.ProseMirror img[data-align="center"]) {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .editor-surface :global(.ProseMirror img[data-align="right"]) {
+    margin-left: auto;
+    margin-right: 0;
   }
   .editor-surface :global(.ProseMirror hr) {
     border: none;
@@ -907,5 +981,13 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
     height: auto;
     border: 2px solid var(--lime);
     margin: 1.25rem 0;
+  }
+  .readonly .body :global(img[data-align="center"]) {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .readonly .body :global(img[data-align="right"]) {
+    margin-left: auto;
+    margin-right: 0;
   }
 </style>
