@@ -48,7 +48,12 @@ async function setFeatured(id: number, featured: boolean) {
 test("E2E-01 home lists published articles and category chips", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveTitle(/VRC6/);
-  await expect(page.getByText("The Digital Underground", { exact: false })).toBeVisible();
+  // Check structurally (feed's first page has a real, visible article title)
+  // rather than a fixed seeded title — which page any specific article lands
+  // on shifts whenever another test in the same CI run publishes a new one
+  // (newest-first homepage ordering); this has broken title-based assertions
+  // here and in E2E-07 before.
+  await expect(page.locator('.feed-item[data-page="0"] .card-title').first()).toBeVisible();
   // exact:true so the all-caps chip matches only itself, not article cards
   // whose accessible name also contains "Photography".
   await expect(page.getByRole("link", { name: "PHOTOGRAPHY", exact: true })).toBeVisible();
@@ -95,14 +100,17 @@ test("E2E-06 empty category shows the empty state", async ({ page }) => {
 test("E2E-07 home feed paginates client-side without a reload", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText(/^1 \/ \d+$/)).toBeVisible();
-  // A page-2 article is in the DOM but hidden on the first page.
-  const pageTwoItem = page.getByRole("heading", {
-    name: "Night Film: Shooting Neon on 35mm",
-  });
+  // Select the first page-2 item structurally (data-page="1"), not by a fixed
+  // seeded title — the exact article that lands on page 2 shifts whenever
+  // another test in the same CI run publishes a new article (newest-first
+  // ordering), which has broken this test twice via unrelated PRs before.
+  const pageTwoItem = page.locator('.feed-item[data-page="1"]').first();
   await expect(pageTwoItem).toBeHidden();
+  const pageTwoTitle = pageTwoItem.locator(".card-title");
   await page.getByRole("button", { name: "More articles" }).click();
   await expect(page.getByText(/^2 \/ \d+$/)).toBeVisible();
   await expect(pageTwoItem).toBeVisible();
+  await expect(pageTwoTitle).toBeVisible();
 });
 
 test("E2E-08 sitemap.xml lists published articles", async ({ page }) => {

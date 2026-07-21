@@ -1,4 +1,52 @@
+import { deflateSync } from "node:zlib";
 import { expect, request as apiRequest, test } from "@playwright/test";
+
+// A minimal, dependency-free PNG encoder (solid color, filter type 0) — used
+// to prove a genuinely oversized inline image gets constrained by CSS, not
+// just a 1x1 pixel that would render tiny regardless of any width rule.
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(buf: Buffer): number {
+  let c = 0xffffffff;
+  for (const b of buf) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+function chunk(type: string, data: Buffer): Buffer {
+  const typeBuf = Buffer.from(type, "ascii");
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length);
+  const crcBuf = Buffer.alloc(4);
+  crcBuf.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])));
+  return Buffer.concat([len, typeBuf, data, crcBuf]);
+}
+function makePng(width: number, height: number, rgb: [number, number, number]): Buffer {
+  const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // color type: RGB
+  const raw = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y++) {
+    const rowStart = y * (width * 3 + 1);
+    raw[rowStart] = 0; // filter type: none
+    for (let x = 0; x < width; x++) {
+      const o = rowStart + 1 + x * 3;
+      raw[o] = rgb[0];
+      raw[o + 1] = rgb[1];
+      raw[o + 2] = rgb[2];
+    }
+  }
+  const idat = deflateSync(raw);
+  return Buffer.concat([sig, chunk("IHDR", ihdr), chunk("IDAT", idat), chunk("IEND", Buffer.alloc(0))]);
+}
 
 const BASE = "http://localhost:8788";
 const PASSWORD = "Sup3rSecret!23";
@@ -487,4 +535,58 @@ test("E2E-55 admin dashboard shows content/user counts and recent activity", asy
   await gotoRetry(page, "/admin");
   await expect(page.getByText("No audit entries yet.")).toHaveCount(0);
   await expect(page.locator(".activity-row").first()).toBeVisible();
+});
+
+test("E2E-57 a large inline body image is constrained to the prose column, not overflowing", async ({
+  page,
+}) => {
+  await signUpAndLogin(page, `wideimg-${Date.now()}@vrc6.com`);
+  const title = `Wide Image Story ${Date.now()}`;
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "+ NEW ARTICLE" }).click();
+  await expect(page.locator("#art-title")).toBeVisible({ timeout: 15_000 });
+  await page.locator("#art-title").fill(title);
+  await page.locator(".ProseMirror").click();
+  await page.keyboard.type("Text before the oversized image.");
+
+  // A genuinely oversized (2000x900) image — proves the constraint actually
+  // shrinks a real large image, not just that a tiny one happens to fit.
+  const png = makePng(2000, 900, [220, 20, 140]);
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    page.locator('[data-cmd="image"]').click(),
+  ]);
+  await chooser.setFiles({ name: "wide.png", mimeType: "image/png", buffer: png });
+  await expect(page.locator(".ProseMirror img")).toHaveCount(1, { timeout: 10_000 });
+
+  await page.locator("#art-category").selectOption({ index: 1 });
+  await expect(page.locator("#save-status")).toHaveText("Saved ✓", { timeout: 10_000 });
+  await page.getByRole("button", { name: "SUBMIT FOR REVIEW" }).click();
+  await expect(page).toHaveURL(`${BASE}/dashboard`);
+
+  await page.context().clearCookies();
+  await signUpAndLogin(page, "owner@vrc6.com");
+  await gotoRetry(page, "/admin/review");
+  await page.locator(".review-row", { hasText: title }).getByRole("link", { name: title }).click();
+  await page.getByRole("button", { name: "APPROVE & PUBLISH" }).click();
+  await expect(page).toHaveURL(`${BASE}/admin/review`);
+
+  await page.context().clearCookies();
+  await gotoRetry(page, `/articles/${slugify(title)}`);
+  const img = page.locator(".body img");
+  await expect(img).toBeVisible();
+
+  const proseBox = (await page.locator(".prose").boundingBox())!;
+  const imgBox = (await img.boundingBox())!;
+  // The real 2000px-wide image renders no wider than its column, preserves
+  // aspect ratio (doesn't distort), and sits flush with the column's left
+  // edge (not centered/offset by an unconstrained overflow).
+  expect(imgBox.width).toBeLessThanOrEqual(proseBox.width + 1);
+  expect(imgBox.x).toBeGreaterThanOrEqual(proseBox.x - 1);
+  expect(imgBox.x + imgBox.width).toBeLessThanOrEqual(proseBox.x + proseBox.width + 1);
+  expect(imgBox.width / imgBox.height).toBeCloseTo(2000 / 900, 1);
+
+  // And it gets the same lime border as the editor's own image styling.
+  const borderColor = await img.evaluate((el) => getComputedStyle(el).borderTopColor);
+  expect(borderColor).toBe("rgb(74, 222, 128)"); // --lime
 });
