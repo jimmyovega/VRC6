@@ -199,10 +199,14 @@ const featuredCoverFocus = focusPosition(featured?.featuredImageFocus);
      cropped background layer behind the text — so a tall/huge image can never
      stretch the card; it's always clipped to this box via object-fit + the
      focal point set in the editor. */
+  /* flex:1 lets the hero fill the left column to match the right column
+     (3 fixed cards + pager) exactly — no dead space under the pager. The small
+     floor only guards a degenerate near-empty homepage; normal content makes
+     the hero taller than this on its own. */
   .featured {
     position: relative;
     flex: 1;
-    min-height: 340px;
+    min-height: 200px;
     display: flex;
     flex-direction: column;
     overflow: hidden;

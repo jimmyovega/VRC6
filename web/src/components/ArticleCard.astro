@@ -79,6 +79,9 @@ const { title, excerpt, slug, category, coverUrl, coverFocus } = Astro.props;
       rgba(2, 12, 6, 0) 100%
     );
   }
+  /* Reserve exactly two lines for the title (and, on coverless cards, the
+     excerpt) so every card's text block is the same height even when the copy
+     is only one line — keeps the feed's rows visually aligned. */
   .card-title {
     font-size: 0.7rem;
     line-height: 1.5;
@@ -88,6 +91,7 @@ const { title, excerpt, slug, category, coverUrl, coverFocus } = Astro.props;
     line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    min-height: 3em; /* 2 lines @ line-height 1.5 */
   }
   .card-excerpt {
     margin: 0;
@@ -96,6 +100,9 @@ const { title, excerpt, slug, category, coverUrl, coverFocus } = Astro.props;
     line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+  }
+  .article:not(.has-cover) .card-excerpt {
+    min-height: 3.2em; /* 2 lines @ line-height 1.6 */
   }
   /* Over an image: lighten the excerpt for legibility and keep it to one line
      so tag + title + excerpt fit the fixed card height without clipping. */
