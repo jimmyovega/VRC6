@@ -64,6 +64,62 @@ describe("renderBodyToHtml — TipTap shape", () => {
   });
 });
 
+describe("renderBodyToHtml — alignment", () => {
+  const p = (text: string, textAlign?: string) => ({
+    type: "paragraph",
+    ...(textAlign ? { attrs: { textAlign } } : {}),
+    content: [{ type: "text", text }],
+  });
+  const h = (level: number, textAlign?: string) => ({
+    type: "heading",
+    attrs: { level, ...(textAlign ? { textAlign } : {}) },
+    content: [{ type: "text", text: "Title" }],
+  });
+  const img = (src: string, align?: string) => ({
+    type: "image",
+    attrs: { src, ...(align ? { align } : {}) },
+  });
+
+  it("emits text-align for center/right paragraphs and headings", () => {
+    expect(renderBodyToHtml({ type: "doc", content: [p("x", "center")] })).toBe(
+      '<p style="text-align:center">x</p>',
+    );
+    expect(renderBodyToHtml({ type: "doc", content: [h(2, "right")] })).toBe(
+      '<h2 style="text-align:right">Title</h2>',
+    );
+  });
+
+  it("omits the style attribute for left (the default) or no alignment", () => {
+    expect(renderBodyToHtml({ type: "doc", content: [p("x", "left")] })).toBe("<p>x</p>");
+    expect(renderBodyToHtml({ type: "doc", content: [p("x")] })).toBe("<p>x</p>");
+  });
+
+  it("emits data-align for center/right images, nothing for left/none", () => {
+    const src = "https://cdn.vrc6.com/a.png";
+    expect(renderBodyToHtml({ type: "doc", content: [img(src, "center")] })).toContain(
+      'data-align="center"',
+    );
+    expect(renderBodyToHtml({ type: "doc", content: [img(src, "right")] })).toContain(
+      'data-align="right"',
+    );
+    expect(renderBodyToHtml({ type: "doc", content: [img(src, "left")] })).not.toContain("data-align");
+    expect(renderBodyToHtml({ type: "doc", content: [img(src)] })).not.toContain("data-align");
+  });
+
+  it("drops any non-allowlisted alignment value instead of emitting it (CSS-injection guard)", () => {
+    const junk = ['center;color:red', 'justify', 'expression(alert(1))', 123, { toString: () => "center" }];
+    for (const value of junk) {
+      const out = renderBodyToHtml({ type: "doc", content: [p("x", value as never)] });
+      expect(out).toBe("<p>x</p>"); // no style attribute leaks through
+      const imgOut = renderBodyToHtml({
+        type: "doc",
+        content: [img("https://cdn.vrc6.com/a.png", value as never)],
+      });
+      expect(imgOut).not.toContain("data-align");
+    }
+  });
+});
+
 describe("renderBodyToHtml — security", () => {
   it("escapes HTML in text (no injection)", () => {
     const body = { type: "doc", content: [{ type: "paragraph", text: "<script>x</script>" }] };

@@ -34,6 +34,21 @@ function safeUrl(url: unknown): string | null {
   return /^(https?:\/\/|mailto:|\/|#)/i.test(trimmed) ? trimmed : null;
 }
 
+// Alignment allowlist — anything else (including "justify", which the editor
+// deliberately never offers) is dropped rather than emitted, so a stored
+// value can never smuggle arbitrary CSS into a `style` attribute.
+const ALLOWED_ALIGN = new Set(["left", "center", "right"]);
+function safeAlign(value: unknown): "left" | "center" | "right" | null {
+  return typeof value === "string" && ALLOWED_ALIGN.has(value)
+    ? (value as "left" | "center" | "right")
+    : null;
+}
+// `left` is the layout default, so only emit a style for center/right.
+function alignStyleAttr(node: Node): string {
+  const align = safeAlign(node.attrs?.textAlign);
+  return align && align !== "left" ? ` style="text-align:${align}"` : "";
+}
+
 function renderMarks(html: string, marks: Mark[] = []): string {
   for (const mark of marks) {
     switch (mark.type) {
@@ -77,10 +92,10 @@ function renderNode(node: Node): string {
     case "text":
       return renderMarks(escapeHtml(node.text ?? ""), node.marks);
     case "paragraph":
-      return `<p>${renderInline(node)}</p>`;
+      return `<p${alignStyleAttr(node)}>${renderInline(node)}</p>`;
     case "heading": {
       const level = Math.min(6, Math.max(1, Number(node.attrs?.level) || 2));
-      return `<h${level}>${renderInline(node)}</h${level}>`;
+      return `<h${level}${alignStyleAttr(node)}>${renderInline(node)}</h${level}>`;
     }
     case "bulletList":
       return `<ul>${renderChildren(node)}</ul>`;
@@ -100,7 +115,10 @@ function renderNode(node: Node): string {
       const src = safeUrl(node.attrs?.src);
       if (!src) return "";
       const alt = escapeHtml(String(node.attrs?.alt ?? ""));
-      return `<img src="${escapeHtml(src)}" alt="${alt}" loading="lazy" />`;
+      // `left` is the layout default (same convention as alignStyleAttr above).
+      const align = safeAlign(node.attrs?.align);
+      const alignAttr = align && align !== "left" ? ` data-align="${align}"` : "";
+      return `<img src="${escapeHtml(src)}" alt="${alt}" loading="lazy"${alignAttr} />`;
     }
     default:
       // Unknown node: render children so nothing is silently dropped.
