@@ -28,6 +28,7 @@ export const CATEGORY_TYPES = [
   "opinions",
   "games",
   "photography",
+  "music",
 ] as const;
 
 // Reusable app timestamp columns (epoch milliseconds).
