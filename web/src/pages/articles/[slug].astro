@@ -437,6 +437,13 @@ const bskyUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(`${ar
       gap: 2.5rem;
       align-items: start;
       max-width: 1040px;
+      /* `<Layout center>` makes .site-main a column flex container, and this
+         element's auto inline margins (for centering) pre-empt flexbox's
+         default cross-axis stretch — without an explicit width it falls back
+         to shrink-to-fit, sizing to its widest content (title/byline/etc.)
+         instead of the intended fixed column. `width: 100%` restores the
+         stretch-then-center behavior so every article gets the same width. */
+      width: 100%;
       margin-inline: auto;
     }
     .article-layout .prose {

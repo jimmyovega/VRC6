@@ -793,3 +793,59 @@ test("E2E-60 editor: insert a multi-image carousel; it renders a slideshow and t
   await page.keyboard.press("Escape");
   await expect(lightbox).toBeHidden();
 });
+
+// Draft → type body → submit → (as owner) approve & publish. Returns the slug.
+async function publishArticle(page: any, title: string, bodyText: string): Promise<string> {
+  await signUpAndLogin(page, `width-${Date.now()}-${Math.random().toString(36).slice(2)}@vrc6.com`);
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "+ NEW ARTICLE" }).click();
+  await expect(page.locator("#art-title")).toBeVisible({ timeout: 15_000 });
+  await page.locator("#art-title").fill(title);
+  await page.locator(".ProseMirror").click();
+  await page.keyboard.type(bodyText);
+  await page.locator("#art-category").selectOption({ index: 1 });
+  await expect(page.locator("#save-status")).toHaveText("Saved ✓", { timeout: 10_000 });
+  await page.getByRole("button", { name: "SUBMIT FOR REVIEW" }).click();
+  await expect(page).toHaveURL(`${BASE}/dashboard`);
+
+  await page.context().clearCookies();
+  await signUpAndLogin(page, "owner@vrc6.com");
+  await gotoRetry(page, "/admin/review");
+  await page.locator(".review-row", { hasText: title }).getByRole("link", { name: title }).click();
+  await page.getByRole("button", { name: "APPROVE & PUBLISH" }).click();
+  await expect(page).toHaveURL(`${BASE}/admin/review`);
+  await page.context().clearCookies();
+  return slugify(title);
+}
+
+test("E2E-61 article detail column width is consistent regardless of body length", async ({
+  page,
+}) => {
+  // A one-line vs. a long-paragraph article — the detail page's two-column
+  // layout (.article-layout) must be the same fixed width either way. It
+  // previously shrank to fit the shortest article's widest line of content
+  // (see the Bugs & Fixes gotcha: auto inline margins on a flex-item ancestor
+  // pre-empt cross-axis stretch, so the box shrink-to-fit its content instead
+  // of filling to max-width).
+  const shortTitle = `Width Short ${Date.now()}`;
+  const shortSlug = await publishArticle(page, shortTitle, "Short.");
+
+  const longTitle = `Width Long ${Date.now()}`;
+  const longBody =
+    "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien " +
+    "vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. " +
+    "Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus.";
+  const longSlug = await publishArticle(page, longTitle, longBody);
+
+  await gotoRetry(page, `/articles/${shortSlug}`);
+  const shortBox = (await page.locator(".article-layout").boundingBox())!;
+
+  await gotoRetry(page, `/articles/${longSlug}`);
+  const longBox = (await page.locator(".article-layout").boundingBox())!;
+
+  expect(shortBox.width).toBeCloseTo(longBox.width, 0);
+  expect(shortBox.x).toBeCloseTo(longBox.x, 0);
+  // And it should actually be at the intended fixed column width, not some
+  // other coincidentally-shared value.
+  expect(shortBox.width).toBeGreaterThan(900);
+});
