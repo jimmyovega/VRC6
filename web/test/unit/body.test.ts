@@ -180,6 +180,61 @@ describe("renderBodyToHtml — image lists", () => {
   });
 });
 
+describe("renderBodyToHtml — carousel", () => {
+  const carousel = (images: unknown[]) => ({
+    type: "doc",
+    content: [{ type: "carousel", attrs: { images } }],
+  });
+
+  it("renders a slideshow with viewport, slides, arrows, and dots", () => {
+    const out = renderBodyToHtml(
+      carousel([
+        { src: "https://cdn.vrc6.com/a.png", w: 400, h: 200 },
+        { src: "https://cdn.vrc6.com/b.png", w: 300, h: 200 },
+      ]),
+    );
+    expect(out).toContain('class="carousel" data-carousel data-count="2"');
+    // Viewport sized to the largest landscape ratio (2.0 here).
+    expect(out).toContain('style="aspect-ratio:2.0000"');
+    expect(out).toContain('<img src="https://cdn.vrc6.com/a.png"');
+    expect(out).toContain('<img src="https://cdn.vrc6.com/b.png"');
+    // Multi-image → arrows + dots present.
+    expect(out).toContain("carousel-arrow prev");
+    expect(out).toContain("carousel-arrow next");
+    expect((out.match(/carousel-dot"/g) ?? []).length).toBe(2);
+  });
+
+  it("omits arrows and dots for a single image", () => {
+    const out = renderBodyToHtml(carousel([{ src: "https://cdn.vrc6.com/a.png", w: 400, h: 300 }]));
+    expect(out).toContain('data-count="1"');
+    expect(out).not.toContain("carousel-arrow");
+    expect(out).not.toContain("carousel-dot");
+  });
+
+  it("drops slides with an unsafe src and escapes alt", () => {
+    const out = renderBodyToHtml(
+      carousel([
+        { src: "javascript:alert(1)", w: 400, h: 200 },
+        { src: "https://cdn.vrc6.com/a.png", alt: '"><script>x</script>', w: 400, h: 200 },
+      ]),
+    );
+    expect(out).not.toContain("javascript:");
+    expect(out).toContain('data-count="1"'); // only the safe slide survived
+    expect(out).toContain("&quot;&gt;&lt;script&gt;x&lt;/script&gt;");
+    expect(out).not.toContain("<script>x</script>");
+  });
+
+  it("renders nothing when no slide has a safe src", () => {
+    expect(renderBodyToHtml(carousel([{ src: "javascript:x" }, { src: 123 }]))).toBe("");
+    expect(renderBodyToHtml(carousel([]))).toBe("");
+  });
+
+  it("falls back to the default aspect ratio when dimensions are missing", () => {
+    const out = renderBodyToHtml(carousel([{ src: "https://cdn.vrc6.com/a.png" }]));
+    expect(out).toContain('style="aspect-ratio:1.5000"');
+  });
+});
+
 describe("renderBodyToHtml — security", () => {
   it("escapes HTML in text (no injection)", () => {
     const body = { type: "doc", content: [{ type: "paragraph", text: "<script>x</script>" }] };

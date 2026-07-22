@@ -172,6 +172,7 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
             <button type="button" data-cmd="link" title="Link">Link</button>
             <button type="button" data-cmd="image" title="Image URL">Image</button>
             <button type="button" data-cmd="imageList" title="Image list (thumbnail + excerpt)">Img List</button>
+            <button type="button" data-cmd="carousel" title="Image carousel (multiple images)">Carousel</button>
             <button type="button" data-cmd="hr" title="Divider">HR</button>
             <span class="sep" />
             <button type="button" data-cmd="alignLeft" title="Align left">L</button>
@@ -220,6 +221,8 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
   import BaseImage from "@tiptap/extension-image";
   import TextAlign from "@tiptap/extension-text-align";
   import { TextSelection } from "@tiptap/pm/state";
+  import { carouselAspectRatioCss } from "../../../../lib/carousel";
+  import { initCarousels } from "../../../../lib/carousel-client";
 
   // Server renderer (lib/body.ts) only understands these three; "justify" is
   // deliberately excluded from the extension's allowlist below.
@@ -240,6 +243,13 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
       };
     },
   });
+
+  // Read-only preview (a submitted/published article opened in the editor)
+  // renders the same carousel markup as the public page, so give it the same
+  // paging + gallery lightbox. The live editable view uses NodeViews instead,
+  // so scope this to the .readonly container to avoid touching those.
+  const readonlyView = document.querySelector<HTMLElement>(".readonly");
+  if (readonlyView) initCarousels(readonlyView);
 
   const app = document.getElementById("editor-app");
   const mount = document.getElementById("editor");
@@ -373,6 +383,134 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
       },
     });
 
+    // ---- Carousel node (Phase 3) -----------------------------------------
+    // An atomic block: a one-at-a-time slideshow whose slides live in
+    // `attrs.images` ([{ src, w, h }]). The server renderer (lib/body.ts) has a
+    // matching `carousel` branch; both size the viewport via carouselAspectRatio.
+    interface Slide {
+      src: string;
+      w?: number;
+      h?: number;
+    }
+    const Carousel = Node.create({
+      name: "carousel",
+      group: "block",
+      atom: true,
+      draggable: true,
+      selectable: true,
+      addAttributes() {
+        return {
+          images: {
+            default: [] as Slide[],
+            parseHTML: (el: HTMLElement) => {
+              try {
+                return JSON.parse(el.getAttribute("data-images") || "[]");
+              } catch {
+                return [];
+              }
+            },
+            renderHTML: (attrs: { images?: Slide[] }) => ({
+              "data-images": JSON.stringify(attrs.images ?? []),
+            }),
+          },
+        };
+      },
+      parseHTML() {
+        return [{ tag: "div[data-carousel-node]" }];
+      },
+      renderHTML({ HTMLAttributes }) {
+        return ["div", mergeAttributes(HTMLAttributes, { "data-carousel-node": "" })];
+      },
+      // Editor NodeView: the same slideshow the public page shows (shared CSS
+      // classes), plus paging and a Remove control. No lightbox while editing —
+      // clicking a slide selects the node instead.
+      addNodeView() {
+        return ({ node, getPos }) => {
+          const images: Slide[] = Array.isArray(node.attrs.images) ? node.attrs.images : [];
+          const valid = images.filter((im) => im && typeof im.src === "string" && im.src);
+          const multi = valid.length > 1;
+
+          const dom = document.createElement("div");
+          dom.className = "carousel is-editing";
+          dom.setAttribute("data-carousel", "");
+          dom.setAttribute("data-count", String(valid.length));
+
+          const viewport = document.createElement("div");
+          viewport.className = "carousel-viewport";
+          viewport.style.aspectRatio = carouselAspectRatioCss(valid);
+          const track = document.createElement("div");
+          track.className = "carousel-track";
+          valid.forEach((im) => {
+            const slide = document.createElement("div");
+            slide.className = "carousel-slide";
+            const img = document.createElement("img");
+            img.src = im.src;
+            img.alt = "";
+            img.draggable = false;
+            slide.appendChild(img);
+            track.appendChild(slide);
+          });
+          viewport.appendChild(track);
+
+          let index = 0;
+          const dotEls: HTMLElement[] = [];
+          const go = (n: number) => {
+            index = (n + valid.length) % valid.length;
+            track.style.transform = `translateX(-${index * 100}%)`;
+            dotEls.forEach((d, i) => d.classList.toggle("is-active", i === index));
+          };
+
+          if (multi) {
+            const prev = document.createElement("button");
+            prev.type = "button";
+            prev.className = "carousel-arrow prev";
+            prev.setAttribute("aria-label", "Previous image");
+            prev.textContent = "‹";
+            prev.addEventListener("click", () => go(index - 1));
+            const next = document.createElement("button");
+            next.type = "button";
+            next.className = "carousel-arrow next";
+            next.setAttribute("aria-label", "Next image");
+            next.textContent = "›";
+            next.addEventListener("click", () => go(index + 1));
+            viewport.appendChild(prev);
+            viewport.appendChild(next);
+          }
+          dom.appendChild(viewport);
+
+          if (multi) {
+            const dots = document.createElement("div");
+            dots.className = "carousel-dots";
+            valid.forEach((_im, i) => {
+              const dot = document.createElement("button");
+              dot.type = "button";
+              dot.className = "carousel-dot";
+              dot.setAttribute("aria-label", `Go to image ${i + 1}`);
+              dot.addEventListener("click", () => go(i));
+              dots.appendChild(dot);
+              dotEls.push(dot);
+            });
+            dom.appendChild(dots);
+          }
+
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.className = "btn pixel carousel-remove";
+          remove.textContent = "REMOVE CAROUSEL";
+          remove.addEventListener("click", () => {
+            if (typeof getPos !== "function") return;
+            const pos = getPos();
+            if (typeof pos !== "number") return;
+            editor.chain().focus().deleteRange({ from: pos, to: pos + node.nodeSize }).run();
+          });
+          dom.appendChild(remove);
+
+          go(0);
+          return { dom };
+        };
+      },
+    });
+
     const editor = new Editor({
       element: mount,
       extensions: [
@@ -389,6 +527,7 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
         Image,
         ImageList,
         ImageListItem,
+        Carousel,
         TextAlign.configure({
           types: ["paragraph", "heading"],
           alignments: [...ALIGNMENTS],
@@ -489,6 +628,10 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
             startImageList();
             break;
           }
+          case "carousel": {
+            insertCarousel();
+            break;
+          }
           default: chain.run();
         }
         refreshToolbar();
@@ -572,6 +715,49 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
       const result = await uploadImage(file);
       // setImage fires onUpdate → the new body (with the image) autosaves.
       if (result) editor.chain().focus().setImage({ src: result.url }).run();
+    }
+
+    // ---- Carousel (Phase 3) ----------------------------------------------
+    // Like pickImageFile but allows selecting several images at once.
+    function pickImageFiles(): Promise<File[]> {
+      return new Promise((resolve) => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "image/png,image/jpeg,image/webp,image/gif";
+        input.multiple = true;
+        input.addEventListener("change", () => resolve(Array.from(input.files ?? [])));
+        input.click();
+      });
+    }
+
+    // Read an image's intrinsic pixel size (for the carousel's deterministic
+    // aspect-ratio sizing). Resolves with zeros if it can't load. Note:
+    // `document.createElement("img")`, not `new Image()` — the module-level
+    // `Image` const (the TipTap node) shadows the global Image constructor.
+    function measureImage(url: string): Promise<{ w: number; h: number }> {
+      return new Promise((resolve) => {
+        const img = document.createElement("img");
+        img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+        img.onerror = () => resolve({ w: 0, h: 0 });
+        img.src = url;
+      });
+    }
+
+    // Toolbar entry point: pick several images, upload each, measure it, then
+    // insert one carousel node. Cancelling (or every upload failing) makes none.
+    async function insertCarousel() {
+      const files = await pickImageFiles();
+      if (files.length === 0) return;
+      setStatus("Uploading images…");
+      const images: { src: string; w: number; h: number }[] = [];
+      for (const file of files) {
+        const result = await uploadImage(file);
+        if (!result) continue;
+        const dims = await measureImage(result.url);
+        images.push({ src: result.url, w: dims.w, h: dims.h });
+      }
+      if (images.length === 0) return;
+      editor.chain().focus().insertContent({ type: "carousel", attrs: { images } }).run();
     }
 
     // ---- Image list (Phase 2) --------------------------------------------
@@ -1025,6 +1211,89 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
   .editor-surface :global(.ili-text p) {
     margin: 0;
   }
+  /* Carousel NodeView — same slideshow the public page shows (shared classes),
+     plus a Remove control. Clicking a slide selects the node (no lightbox here). */
+  .editor-surface :global(.carousel) {
+    position: relative;
+    margin: 1rem 0;
+  }
+  .editor-surface :global(.carousel-viewport) {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    border: 2px solid var(--lime);
+    background: var(--ink);
+  }
+  .editor-surface :global(.carousel-track) {
+    display: flex;
+    height: 100%;
+    transition: transform 0.3s ease;
+  }
+  .editor-surface :global(.carousel-slide) {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* Override the generic ProseMirror img rule (border + block margins). */
+  .editor-surface :global(.carousel-slide img) {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    object-fit: contain;
+    margin: 0;
+    border: 0;
+    display: block;
+  }
+  .editor-surface :global(.carousel-arrow) {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    width: 2.2rem;
+    height: 2.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Press Start 2P", monospace;
+    font-size: 1.1rem;
+    color: var(--deep-moss);
+    background: var(--lime);
+    border: 2px solid var(--phosphor);
+    cursor: pointer;
+  }
+  .editor-surface :global(.carousel-arrow.prev) {
+    left: 0.5rem;
+  }
+  .editor-surface :global(.carousel-arrow.next) {
+    right: 0.5rem;
+  }
+  .editor-surface :global(.carousel-dots) {
+    display: flex;
+    justify-content: center;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+  }
+  .editor-surface :global(.carousel-dot) {
+    width: 0.7rem;
+    height: 0.7rem;
+    padding: 0;
+    border: 2px solid var(--lime);
+    background: transparent;
+    cursor: pointer;
+  }
+  .editor-surface :global(.carousel-dot.is-active) {
+    background: var(--lime);
+  }
+  .editor-surface :global(.carousel-remove) {
+    margin-top: 0.5rem;
+    background: var(--deep-moss);
+    color: #fca5a5;
+    border-color: #fca5a5;
+    cursor: pointer;
+  }
 
   .banner {
     font-size: 0.55rem;
@@ -1273,5 +1542,83 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
     min-width: 0;
     line-height: 1.9;
     color: var(--phosphor);
+  }
+  .readonly .body :global(.carousel) {
+    position: relative;
+    margin: 1.5rem 0;
+  }
+  .readonly .body :global(.carousel-viewport) {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    border: 2px solid var(--lime);
+    background: var(--ink);
+  }
+  .readonly .body :global(.carousel-track) {
+    display: flex;
+    height: 100%;
+    transition: transform 0.3s ease;
+  }
+  .readonly .body :global(.carousel-slide) {
+    flex: 0 0 100%;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: zoom-in;
+  }
+  .readonly .body :global(.carousel-slide img) {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    object-fit: contain;
+    margin: 0;
+    border: 0;
+    display: block;
+  }
+  .readonly .body :global(.carousel-arrow) {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    width: 2.2rem;
+    height: 2.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Press Start 2P", monospace;
+    font-size: 1.1rem;
+    color: var(--deep-moss);
+    background: var(--lime);
+    border: 2px solid var(--phosphor);
+    cursor: pointer;
+  }
+  .readonly .body :global(.carousel-arrow.prev) {
+    left: 0.5rem;
+  }
+  .readonly .body :global(.carousel-arrow.next) {
+    right: 0.5rem;
+  }
+  .readonly .body :global(.carousel-dots) {
+    display: flex;
+    justify-content: center;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+  }
+  .readonly .body :global(.carousel-dot) {
+    width: 0.7rem;
+    height: 0.7rem;
+    padding: 0;
+    border: 2px solid var(--lime);
+    background: transparent;
+    cursor: pointer;
+  }
+  .readonly .body :global(.carousel-dot.is-active) {
+    background: var(--lime);
   }
 </style>
