@@ -120,6 +120,18 @@ function renderNode(node: Node): string {
       const alignAttr = align && align !== "left" ? ` data-align="${align}"` : "";
       return `<img src="${escapeHtml(src)}" alt="${alt}" loading="lazy"${alignAttr} />`;
     }
+    case "imageList":
+      return `<ul class="image-list">${renderChildren(node)}</ul>`;
+    case "imageListItem": {
+      // Each item = a thumbnail "bullet" (safeUrl'd, else omitted) beside a
+      // rich-text excerpt (escaped + mark-allowlisted via renderInline).
+      const src = safeUrl(node.attrs?.src);
+      const alt = escapeHtml(String(node.attrs?.alt ?? ""));
+      const img = src
+        ? `<img class="ili-thumb" src="${escapeHtml(src)}" alt="${alt}" loading="lazy" />`
+        : "";
+      return `<li class="ili">${img}<div class="ili-text">${renderInline(node)}</div></li>`;
+    }
     default:
       // Unknown node: render children so nothing is silently dropped.
       return renderChildren(node);

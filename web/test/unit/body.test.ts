@@ -120,6 +120,66 @@ describe("renderBodyToHtml — alignment", () => {
   });
 });
 
+describe("renderBodyToHtml — image lists", () => {
+  const item = (src: string | undefined, excerpt: unknown) => ({
+    type: "imageListItem",
+    ...(src !== undefined ? { attrs: { src } } : {}),
+    content: excerpt,
+  });
+  const list = (...items: unknown[]) => ({
+    type: "doc",
+    content: [{ type: "imageList", content: items }],
+  });
+  const text = (t: string, marks?: unknown[]) => ({ type: "text", text: t, ...(marks ? { marks } : {}) });
+
+  it("renders a list of thumbnail + excerpt rows", () => {
+    const out = renderBodyToHtml(
+      list(
+        item("https://cdn.vrc6.com/a.png", [text("First caption")]),
+        item("https://cdn.vrc6.com/b.png", [text("Second caption")]),
+      ),
+    );
+    expect(out).toBe(
+      '<ul class="image-list">' +
+        '<li class="ili"><img class="ili-thumb" src="https://cdn.vrc6.com/a.png" alt="" loading="lazy" /><div class="ili-text">First caption</div></li>' +
+        '<li class="ili"><img class="ili-thumb" src="https://cdn.vrc6.com/b.png" alt="" loading="lazy" /><div class="ili-text">Second caption</div></li>' +
+        "</ul>",
+    );
+  });
+
+  it("renders excerpt marks through the inline renderer", () => {
+    const out = renderBodyToHtml(
+      list(item("https://cdn.vrc6.com/a.png", [text("bold", [{ type: "bold" }])])),
+    );
+    expect(out).toContain('<div class="ili-text"><strong>bold</strong></div>');
+  });
+
+  it("escapes excerpt text (no injection through the caption)", () => {
+    const out = renderBodyToHtml(
+      list(item("https://cdn.vrc6.com/a.png", [text("<img src=x onerror=alert(1)>")])),
+    );
+    expect(out).toContain(
+      '<div class="ili-text">&lt;img src=x onerror=alert(1)&gt;</div>',
+    );
+    expect(out).not.toContain("onerror=alert(1)>");
+  });
+
+  it("runs the thumbnail src through the scheme allowlist", () => {
+    // A dangerous src drops just the <img>, keeping the (still-escaped) excerpt.
+    const bad = renderBodyToHtml(list(item("javascript:alert(1)", [text("cap")])));
+    expect(bad).toBe('<ul class="image-list"><li class="ili"><div class="ili-text">cap</div></li></ul>');
+    expect(bad).not.toContain("javascript:");
+    // And a normal src is emitted, escaped.
+    const ok = renderBodyToHtml(list(item("https://cdn.vrc6.com/a.png", [text("cap")])));
+    expect(ok).toContain('<img class="ili-thumb" src="https://cdn.vrc6.com/a.png"');
+  });
+
+  it("renders an empty excerpt as an empty text cell", () => {
+    const out = renderBodyToHtml(list(item("https://cdn.vrc6.com/a.png", [])));
+    expect(out).toContain('<div class="ili-text"></div>');
+  });
+});
+
 describe("renderBodyToHtml — security", () => {
   it("escapes HTML in text (no injection)", () => {
     const body = { type: "doc", content: [{ type: "paragraph", text: "<script>x</script>" }] };
