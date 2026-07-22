@@ -62,11 +62,17 @@ test("E2E-01 home lists published articles and category chips", async ({ page })
 test("E2E-02 clicking the featured article opens its detail page with breadcrumb", async ({ page }) => {
   await page.goto("/");
   // The featured article is always visible (not subject to feed pagination).
-  await page.getByRole("link", { name: /Against the Algorithm/ }).click();
-  await expect(page).toHaveURL(/\/articles\/against-the-algorithm$/);
-  await expect(
-    page.getByRole("heading", { level: 1, name: /Against the Algorithm/ }),
-  ).toBeVisible();
+  // Read whichever article is currently the hero rather than asserting a
+  // fixed seeded title — the hero falls back to "most recently published"
+  // absent an admin-curated pick (pickFeaturedArticle in lib/article.ts), so
+  // a concurrent test that publishes a new article (e.g. E2E-58) can bump a
+  // fixed seed out of the slot, as happened in CI.
+  const heroCard = page.locator("a.featured");
+  const heroHref = await heroCard.getAttribute("href");
+  const heroTitle = (await heroCard.locator(".feat-title").innerText()).trim();
+  await heroCard.click();
+  await expect(page).toHaveURL(`${BASE}${heroHref}`);
+  await expect(page.getByRole("heading", { level: 1, name: heroTitle })).toBeVisible();
   // Breadcrumb: Home (link) << Category (link)
   const crumbs = page.getByRole("navigation", { name: "Breadcrumb" });
   await expect(crumbs.getByRole("link", { name: "Home" })).toBeVisible();
