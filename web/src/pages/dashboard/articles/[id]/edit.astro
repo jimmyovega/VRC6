@@ -133,7 +133,8 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
               </div>
             </div>
             <p class="cover-hint pixel" id="cover-hint" hidden={!coverUrl}>
-              Drag the image to reposition · dashed box = small-card crop
+              Drag the image to reposition · dashed box = small-card crop ·
+              shaped to match your current window
             </p>
             <div class="cover-actions">
               <button class="btn pixel" type="button" id="cover-upload-btn">UPLOAD COVER</button>
@@ -886,10 +887,81 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
       return true;
     }
 
-    // Representative desktop aspect ratios (width ÷ height): the preview frame
-    // is the hero's crop shape; a small (non-hero) card is wider + shorter.
-    const HERO_AR = 11 / 5; // 2.2 — keep in sync with .cover-preview aspect-ratio
-    const CARD_AR = 3.7; // ~608 / 165 at desktop
+    // Hero/card aspect ratios (width ÷ height). Both are fixed-height +
+    // fluid-width on the homepage (--card-h is a constant pixel height; the
+    // hero uses flex:1 to match the feed column's height), so their true
+    // on-screen shape depends on the viewer's own viewport width — it isn't
+    // one fixed value. These start as a reasonable desktop-ish default and get
+    // replaced by a live measurement below (see measureLiveShapes) so the
+    // preview matches whatever THIS device/window would actually show.
+    let HERO_AR = 11 / 5; // 2.2 — CSS fallback default; keep in sync with .cover-preview
+    let CARD_AR = 3.7; // ~608 / 165 at desktop — fallback default only
+
+    // Measure the real homepage's hero/card shapes at the current window
+    // width, in a hidden same-origin iframe. This is the ground truth for
+    // "what would this look like on my device" — rather than re-deriving the
+    // homepage's grid/flex math in a second place (which is exactly how the
+    // fallback constants above drifted out of sync with reality), we just
+    // load the actual page and measure it.
+    let measureFrame: HTMLIFrameElement | null = null;
+    let measureFrameReady = false;
+    function readLiveShapesFromFrame(frame: HTMLIFrameElement) {
+      try {
+        const doc = frame.contentDocument;
+        const hero = doc?.querySelector<HTMLElement>(".featured");
+        const card = doc?.querySelector<HTMLElement>(".card.article");
+        if (hero) {
+          const r = hero.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) {
+            HERO_AR = r.width / r.height;
+            if (coverPreview) coverPreview.style.aspectRatio = String(HERO_AR);
+          }
+        }
+        if (card) {
+          const r = card.getBoundingClientRect();
+          if (r.width > 0 && r.height > 0) CARD_AR = r.width / r.height;
+        }
+      } catch {
+        // Cross-origin or otherwise inaccessible — keep the fallback ratios.
+      }
+      positionGuide();
+    }
+    function measureLiveShapes() {
+      // Match the iframe to the ACTUAL current window size (not an
+      // arbitrarily tall box) — if the homepage's content needs a scrollbar
+      // at this size, the iframe gets one too, consuming the same width a
+      // real top-level tab would lose to it. Guessing a fixed scrollbar
+      // width would be wrong across OSes/browsers (some are ~15px, some
+      // overlay and take none); matching real dimensions sidesteps that.
+      if (!measureFrame) {
+        const f = document.createElement("iframe");
+        f.setAttribute("aria-hidden", "true");
+        f.tabIndex = -1;
+        f.style.position = "fixed";
+        f.style.top = "-9999px";
+        f.style.left = "0";
+        f.style.border = "0";
+        f.style.height = `${window.innerHeight}px`;
+        f.style.width = `${window.innerWidth}px`;
+        f.addEventListener("load", () => {
+          measureFrameReady = true;
+          readLiveShapesFromFrame(f);
+        });
+        document.body.appendChild(f);
+        measureFrame = f;
+        f.src = "/";
+        return;
+      }
+      // Already loaded once — resizing the iframe element reflows its
+      // document at the new size immediately, same as resizing a real
+      // browser window, so there's no need to reload it.
+      measureFrame.style.width = `${window.innerWidth}px`;
+      measureFrame.style.height = `${window.innerHeight}px`;
+      if (measureFrameReady) {
+        const frame = measureFrame;
+        requestAnimationFrame(() => readLiveShapesFromFrame(frame));
+      }
+    }
 
     // Place the small-card guide band. Because object-fit:cover crops a
     // different-shaped box to a different vertical slice for the same focal
@@ -960,7 +1032,13 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
     };
     coverPreview?.addEventListener("pointerup", endPan);
     coverPreview?.addEventListener("pointercancel", endPan);
-    window.addEventListener("resize", positionGuide);
+    let measureResizeTimer: ReturnType<typeof setTimeout> | undefined;
+    window.addEventListener("resize", () => {
+      positionGuide();
+      clearTimeout(measureResizeTimer);
+      measureResizeTimer = setTimeout(measureLiveShapes, 300);
+    });
+    measureLiveShapes();
 
     coverUploadBtn?.addEventListener("click", async () => {
       const file = await pickImageFile();
@@ -1375,17 +1453,19 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
     color: var(--lime);
     margin-bottom: 0.5rem;
   }
-  /* Preview frame mirrors the featured hero's portrait crop; drag the image to
-     set the focal point. The dashed guide shows the smaller article-card crop. */
-  /* The frame is the featured hero's exact crop shape (~2.2:1 at desktop), so
-     what you frame here is what the hero shows. A tall image overflows
-     top/bottom; pan up/down to pick the crop. The dashed guide marks where a
-     small (non-hero) card — a wider, shorter shape — actually lands. */
+  /* Preview frame mirrors the featured hero's crop; drag the image to set the
+     focal point. The dashed guide shows the smaller article-card crop. Both
+     shapes are fixed-height + fluid-width on the homepage, so their true
+     on-screen ratio depends on the viewer's own window width — the JS
+     (measureLiveShapes) measures the real homepage at *your* current window
+     width and overrides this via inline style; the value below is only the
+     fallback shown before that measurement lands (or if it fails). A tall
+     image overflows top/bottom; pan up/down to pick the crop. */
   .cover-preview {
     position: relative;
     width: 100%;
     max-width: 440px;
-    aspect-ratio: 11 / 5;
+    aspect-ratio: 11 / 5; /* fallback only — see measureLiveShapes */
     background: var(--deep-moss);
     border: 2px solid var(--lime);
     display: flex;
