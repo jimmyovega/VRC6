@@ -643,3 +643,72 @@ test("E2E-58 editor: aligns a paragraph and an image, both render aligned on the
   // align:right resolves to margin-left:auto (some computed px) + margin-right:0.
   await expect(publicImg).toHaveCSS("margin-right", "0px");
 });
+
+test("E2E-59 editor: build a two-item image list, both thumbnails + excerpts render on the public page", async ({
+  page,
+}) => {
+  const title = `Image List Story ${Date.now()}`;
+  await signUpAndLogin(page, `imglist-${Date.now()}@vrc6.com`);
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "+ NEW ARTICLE" }).click();
+  await expect(page.locator("#art-title")).toBeVisible({ timeout: 15_000 });
+  await page.locator("#art-title").fill(title);
+
+  await page.locator(".ProseMirror").click();
+
+  // Start the list: the toolbar button asks for the first image immediately.
+  const png1 = makePng(400, 260, [40, 180, 90]); // landscape
+  const [chooser1] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    page.locator('[data-cmd="imageList"]').click(),
+  ]);
+  await chooser1.setFiles({ name: "one.png", mimeType: "image/png", buffer: png1 });
+  // First item appears; cursor is in its excerpt.
+  await expect(page.locator(".ProseMirror .ili")).toHaveCount(1, { timeout: 10_000 });
+  await page.keyboard.type("First caption");
+
+  // Enter in a non-empty item prompts for the next image (the async keymap path
+  // that the toolbar mousedown-preventDefault makes possible — keystrokes must
+  // reach the editor, not a button).
+  const png2 = makePng(240, 360, [180, 60, 200]); // portrait
+  const [chooser2] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    page.keyboard.press("Enter"),
+  ]);
+  await chooser2.setFiles({ name: "two.png", mimeType: "image/png", buffer: png2 });
+  await expect(page.locator(".ProseMirror .ili")).toHaveCount(2, { timeout: 10_000 });
+  await page.keyboard.type("Second caption");
+  // Escape exits the list, leaving both items intact.
+  await page.keyboard.press("Escape");
+
+  // Both items are present in the editor with thumbnails + captions.
+  await expect(page.locator(".ProseMirror .ili-thumb")).toHaveCount(2);
+  await expect(page.locator(".ProseMirror .ili-text").first()).toHaveText("First caption");
+  await expect(page.locator(".ProseMirror .ili-text").nth(1)).toHaveText("Second caption");
+
+  await page.locator("#art-category").selectOption({ index: 1 });
+  await expect(page.locator("#save-status")).toHaveText("Saved ✓", { timeout: 10_000 });
+  await page.getByRole("button", { name: "SUBMIT FOR REVIEW" }).click();
+  await expect(page).toHaveURL(`${BASE}/dashboard`);
+
+  await page.context().clearCookies();
+  await signUpAndLogin(page, "owner@vrc6.com");
+  await gotoRetry(page, "/admin/review");
+  await page.locator(".review-row", { hasText: title }).getByRole("link", { name: title }).click();
+  await page.getByRole("button", { name: "APPROVE & PUBLISH" }).click();
+  await expect(page).toHaveURL(`${BASE}/admin/review`);
+
+  await page.context().clearCookies();
+  await gotoRetry(page, `/articles/${slugify(title)}`);
+  const list = page.locator(".body .image-list");
+  await expect(list).toBeVisible();
+  await expect(page.locator(".body .ili")).toHaveCount(2);
+  const thumbs = page.locator(".body .ili-thumb");
+  await expect(thumbs).toHaveCount(2);
+  await expect(thumbs.first()).toBeVisible();
+  // The image is reduced to a small thumbnail "bullet", not a full-width image.
+  const thumbBox = (await thumbs.first().boundingBox())!;
+  expect(thumbBox.width).toBeLessThanOrEqual(90);
+  await expect(page.locator(".body .ili-text").first()).toHaveText("First caption");
+  await expect(page.locator(".body .ili-text").nth(1)).toHaveText("Second caption");
+});

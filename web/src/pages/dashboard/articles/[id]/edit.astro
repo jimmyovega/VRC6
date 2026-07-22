@@ -171,6 +171,7 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
             <span class="sep" />
             <button type="button" data-cmd="link" title="Link">Link</button>
             <button type="button" data-cmd="image" title="Image URL">Image</button>
+            <button type="button" data-cmd="imageList" title="Image list (thumbnail + excerpt)">Img List</button>
             <button type="button" data-cmd="hr" title="Divider">HR</button>
             <span class="sep" />
             <button type="button" data-cmd="alignLeft" title="Align left">L</button>
@@ -214,10 +215,11 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
 </Layout>
 
 <script>
-  import { Editor } from "@tiptap/core";
+  import { Editor, Node, mergeAttributes } from "@tiptap/core";
   import StarterKit from "@tiptap/starter-kit";
   import BaseImage from "@tiptap/extension-image";
   import TextAlign from "@tiptap/extension-text-align";
+  import { TextSelection } from "@tiptap/pm/state";
 
   // Server renderer (lib/body.ts) only understands these three; "justify" is
   // deliberately excluded from the extension's allowlist below.
@@ -277,6 +279,100 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
       initial = EMPTY;
     }
 
+    // ---- Image-list nodes (Phase 2) --------------------------------------
+    // A list where each item is a small thumbnail "bullet" (the image, stored
+    // as a `src` attr) beside a rich-text excerpt (the item's inline content).
+    // The server renderer (lib/body.ts) has matching `imageList`/`imageListItem`
+    // branches — keep the two in sync. `alt` is carried but not yet UI-editable.
+    const ImageListItem = Node.create({
+      name: "imageListItem",
+      // Run this node's Enter/Escape shortcuts ahead of core's splitBlock so
+      // Enter inside an item is ours to interpret (next image / exit), never a
+      // plain paragraph split out of the list.
+      priority: 1000,
+      content: "inline*",
+      defining: true,
+      draggable: false,
+      addAttributes() {
+        return {
+          src: {
+            default: null,
+            parseHTML: (el: HTMLElement) => el.getAttribute("data-src"),
+            renderHTML: (attrs: { src?: string | null }) =>
+              attrs.src ? { "data-src": attrs.src } : {},
+          },
+          alt: {
+            default: null,
+            parseHTML: (el: HTMLElement) => el.getAttribute("data-alt"),
+            renderHTML: (attrs: { alt?: string | null }) =>
+              attrs.alt ? { "data-alt": attrs.alt } : {},
+          },
+        };
+      },
+      parseHTML() {
+        return [{ tag: "li[data-image-list-item]" }];
+      },
+      renderHTML({ HTMLAttributes }) {
+        return ["li", mergeAttributes(HTMLAttributes, { "data-image-list-item": "" }), 0];
+      },
+      // Thumbnail-left / excerpt-right layout. The <img> is non-editable chrome
+      // derived from the `src` attr; the excerpt is ProseMirror content (the
+      // contentDOM), so marks/links inside it Just Work.
+      addNodeView() {
+        return ({ node }) => {
+          const dom = document.createElement("li");
+          dom.className = "ili";
+          const img = document.createElement("img");
+          img.className = "ili-thumb";
+          img.setAttribute("contenteditable", "false");
+          img.draggable = false;
+          const applySrc = (n: typeof node) => {
+            if (n.attrs.src && img.dataset.src !== n.attrs.src) {
+              img.dataset.src = n.attrs.src;
+              img.src = n.attrs.src;
+            }
+            if (n.attrs.alt) img.alt = n.attrs.alt;
+          };
+          applySrc(node);
+          const content = document.createElement("div");
+          content.className = "ili-text";
+          dom.appendChild(img);
+          dom.appendChild(content);
+          return {
+            dom,
+            contentDOM: content,
+            update: (updated) => {
+              if (updated.type.name !== "imageListItem") return false;
+              applySrc(updated);
+              return true;
+            },
+          };
+        };
+      },
+      addKeyboardShortcuts() {
+        return {
+          Enter: () => handleImageListEnter(this.editor),
+          Escape: () => handleImageListEscape(this.editor),
+        };
+      },
+    });
+
+    const ImageList = Node.create({
+      name: "imageList",
+      group: "block",
+      content: "imageListItem+",
+      parseHTML() {
+        return [{ tag: "ul[data-image-list]" }];
+      },
+      renderHTML({ HTMLAttributes }) {
+        return [
+          "ul",
+          mergeAttributes(HTMLAttributes, { "data-image-list": "", class: "image-list" }),
+          0,
+        ];
+      },
+    });
+
     const editor = new Editor({
       element: mount,
       extensions: [
@@ -291,6 +387,8 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
           },
         }),
         Image,
+        ImageList,
+        ImageListItem,
         TextAlign.configure({
           types: ["paragraph", "heading"],
           alignments: [...ALIGNMENTS],
@@ -387,6 +485,10 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
             pickAndUploadImage();
             break;
           }
+          case "imageList": {
+            startImageList();
+            break;
+          }
           default: chain.run();
         }
         refreshToolbar();
@@ -470,6 +572,123 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
       const result = await uploadImage(file);
       // setImage fires onUpdate → the new body (with the image) autosaves.
       if (result) editor.chain().focus().setImage({ src: result.url }).run();
+    }
+
+    // ---- Image list (Phase 2) --------------------------------------------
+    // Depth of the enclosing imageListItem for the current selection, or -1.
+    function imageListItemDepth(state: typeof editor.state): number {
+      const { $from } = state.selection;
+      for (let d = $from.depth; d > 0; d--) {
+        if ($from.node(d).type.name === "imageListItem") return d;
+      }
+      return -1;
+    }
+
+    // Toolbar entry point: pick ONE image, then start a fresh list with a single
+    // item and drop the cursor into its (empty) excerpt. Cancelling makes no list.
+    async function startImageList() {
+      const file = await pickImageFile();
+      if (!file) return;
+      setStatus("Uploading image…");
+      const result = await uploadImage(file);
+      if (!result) return;
+      const { state, view } = editor;
+      const { $from } = state.selection;
+      const item = state.schema.nodes.imageListItem.create({ src: result.url });
+      const list = state.schema.nodes.imageList.create(null, item);
+      // Replace the current block if it's an empty paragraph (the common case in
+      // a fresh draft), otherwise insert the list right after it. Either way the
+      // list starts at `listAt`, so the item's inline content is at listAt + 2
+      // (one step into the list, one into the item).
+      const emptyPara =
+        $from.parent.type.name === "paragraph" && $from.parent.content.size === 0;
+      let tr = state.tr;
+      let listAt: number;
+      if (emptyPara) {
+        listAt = $from.before($from.depth);
+        tr = tr.replaceWith(listAt, $from.after($from.depth), list);
+      } else {
+        listAt = $from.after($from.depth);
+        tr = tr.insert(listAt, list);
+      }
+      tr = tr.setSelection(TextSelection.create(tr.doc, listAt + 2)).scrollIntoView();
+      view.dispatch(tr);
+      view.focus();
+    }
+
+    // Enter inside an item: an empty item exits the list (like an empty bullet);
+    // a non-empty item prompts for the next image and, if chosen, appends a new
+    // item. Returns true to consume the key when we're inside a list.
+    function handleImageListEnter(ed: typeof editor): boolean {
+      const state = ed.state;
+      const d = imageListItemDepth(state);
+      if (d < 0) return false;
+      const itemEmpty = state.selection.$from.node(d).content.size === 0;
+      if (itemEmpty) return exitImageList(ed);
+      // Capture the insertion point (just after the current item) synchronously,
+      // before the async picker — the modal file dialog blocks doc edits, so the
+      // position stays valid across the await and doesn't depend on where the
+      // selection lands afterward.
+      const after = state.selection.$from.after(d);
+      void promptNextImageListItem(ed, after);
+      return true;
+    }
+
+    // Escape always exits the list (keeping a non-empty item, dropping an empty one).
+    function handleImageListEscape(ed: typeof editor): boolean {
+      if (imageListItemDepth(ed.state) < 0) return false;
+      return exitImageList(ed);
+    }
+
+    async function promptNextImageListItem(ed: typeof editor, after: number) {
+      const file = await pickImageFile();
+      if (!file) return; // cancelled → no new item, stay put
+      setStatus("Uploading image…");
+      const result = await uploadImage(file);
+      if (!result) return;
+      insertImageListItemAt(ed, after, result.url);
+    }
+
+    // Insert a new empty item at `after` (the boundary just after some item),
+    // cursor in its excerpt.
+    function insertImageListItemAt(ed: typeof editor, after: number, src: string) {
+      const { state, view } = ed;
+      const item = state.schema.nodes.imageListItem.create({ src });
+      let tr = state.tr.insert(after, item);
+      tr = tr.setSelection(TextSelection.create(tr.doc, after + 1)).scrollIntoView();
+      view.dispatch(tr);
+      view.focus();
+    }
+
+    // Leave the list, landing the cursor in a fresh paragraph just after it.
+    // Cases: empty sole item → replace the whole list with the paragraph; empty
+    // item among others → drop that item then append the paragraph; non-empty
+    // item (Escape) → keep it and append the paragraph.
+    function exitImageList(ed: typeof editor): boolean {
+      const { state, view } = ed;
+      const { $from } = state.selection;
+      const d = imageListItemDepth(state);
+      if (d < 0) return false;
+      const listDepth = d - 1;
+      const listNode = $from.node(listDepth);
+      const listFrom = $from.before(listDepth);
+      const listTo = $from.after(listDepth);
+      const itemEmpty = $from.node(d).content.size === 0;
+      const onlyItem = listNode.childCount === 1;
+      const para = state.schema.nodes.paragraph.create();
+      let tr = state.tr;
+      if (itemEmpty && onlyItem) {
+        tr = tr.replaceWith(listFrom, listTo, para);
+        tr = tr.setSelection(TextSelection.create(tr.doc, listFrom + 1));
+      } else {
+        if (itemEmpty) tr = tr.delete($from.before(d), $from.after(d));
+        const at = tr.mapping.map(listTo);
+        tr = tr.insert(at, para);
+        tr = tr.setSelection(TextSelection.create(tr.doc, at + 1));
+      }
+      view.dispatch(tr.scrollIntoView());
+      view.focus();
+      return true;
     }
 
     // Representative desktop aspect ratios (width ÷ height): the preview frame
@@ -770,6 +989,42 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
     border-top: 2px dashed var(--lime);
     margin: 1.5rem 0;
   }
+  /* Image list: a thumbnail "bullet" beside a rich-text excerpt. Shared class
+     names (.image-list/.ili/.ili-thumb/.ili-text) with the public renderer so
+     the editor and the published page match. */
+  .editor-surface :global(.image-list) {
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+  }
+  .editor-surface :global(.ili) {
+    display: flex;
+    gap: 0.85rem;
+    align-items: flex-start;
+    padding: 0.6rem 0;
+    border-top: 1px solid rgba(74, 222, 128, 0.3);
+  }
+  .editor-surface :global(.ili:first-child) {
+    border-top: none;
+  }
+  .editor-surface :global(.ili-thumb) {
+    flex: 0 0 auto;
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    border: 2px solid var(--lime);
+    /* Override the generic ProseMirror img rule (block + auto margins). */
+    margin: 0;
+    display: block;
+  }
+  .editor-surface :global(.ili-text) {
+    flex: 1 1 auto;
+    min-width: 0;
+    line-height: 1.7;
+  }
+  .editor-surface :global(.ili-text p) {
+    margin: 0;
+  }
 
   .banner {
     font-size: 0.55rem;
@@ -989,5 +1244,34 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
   .readonly .body :global(img[data-align="right"]) {
     margin-left: auto;
     margin-right: 0;
+  }
+  .readonly .body :global(.image-list) {
+    list-style: none;
+    margin: 1.25rem 0;
+    padding: 0;
+  }
+  .readonly .body :global(.ili) {
+    display: flex;
+    gap: 0.85rem;
+    align-items: flex-start;
+    padding: 0.6rem 0;
+    border-top: 1px solid rgba(74, 222, 128, 0.3);
+  }
+  .readonly .body :global(.ili:first-child) {
+    border-top: none;
+  }
+  .readonly .body :global(.ili-thumb) {
+    flex: 0 0 auto;
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    border: 2px solid var(--lime);
+    margin: 0;
+  }
+  .readonly .body :global(.ili-text) {
+    flex: 1 1 auto;
+    min-width: 0;
+    line-height: 1.9;
+    color: var(--phosphor);
   }
 </style>

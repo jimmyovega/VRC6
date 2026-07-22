@@ -217,6 +217,40 @@ const bskyUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(`${ar
     margin-left: auto;
     margin-right: 0;
   }
+  /* Image list: a small thumbnail "bullet" beside a rich-text excerpt (renderer
+     emits <ul class="image-list"><li class="ili">…). Shared class names with the
+     editor surface so the draft and the published page match. */
+  .body :global(.image-list) {
+    list-style: none;
+    margin: 1.5rem 0;
+    padding: 0;
+  }
+  .body :global(.ili) {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    padding: 0.75rem 0;
+    border-top: 1px solid rgba(74, 222, 128, 0.3);
+  }
+  .body :global(.ili:first-child) {
+    border-top: none;
+  }
+  .body :global(.ili-thumb) {
+    flex: 0 0 auto;
+    width: 84px;
+    height: 84px;
+    object-fit: cover;
+    /* Override the generic .body img rule (block + 1.25rem vertical margins). */
+    margin: 0;
+    border: 2px solid var(--lime);
+    max-width: none;
+  }
+  .body :global(.ili-text) {
+    flex: 1 1 auto;
+    min-width: 0;
+    line-height: 1.8;
+    color: var(--phosphor);
+  }
 
   .cover-img {
     display: block;
