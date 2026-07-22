@@ -132,7 +132,7 @@ function renderNode(node: Node): string {
       const img = src
         ? `<img class="ili-thumb" src="${escapeHtml(src)}" alt="${alt}" loading="lazy" />`
         : "";
-      return `<li class="ili">${img}<div class="ili-text">${renderInline(node)}</div></li>`;
+      return `<li class="ili">${img}<div class="ili-text"${alignStyleAttr(node)}>${renderInline(node)}</div></li>`;
     }
     case "carousel": {
       // A one-at-a-time slideshow. Slides live in `attrs.images` (not content);

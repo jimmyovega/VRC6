@@ -178,6 +178,31 @@ describe("renderBodyToHtml — image lists", () => {
     const out = renderBodyToHtml(list(item("https://cdn.vrc6.com/a.png", [])));
     expect(out).toContain('<div class="ili-text"></div>');
   });
+
+  it("aligns the excerpt when the item carries a textAlign attr (allowlisted)", () => {
+    const aligned = (textAlign: unknown) => ({
+      type: "doc",
+      content: [
+        {
+          type: "imageList",
+          content: [
+            {
+              type: "imageListItem",
+              attrs: { src: "https://cdn.vrc6.com/a.png", textAlign },
+              content: [text("cap")],
+            },
+          ],
+        },
+      ],
+    });
+    expect(renderBodyToHtml(aligned("center"))).toContain(
+      '<div class="ili-text" style="text-align:center">cap</div>',
+    );
+    expect(renderBodyToHtml(aligned("right"))).toContain('style="text-align:right"');
+    // left is the default → no style; junk is dropped (CSS-injection guard).
+    expect(renderBodyToHtml(aligned("left"))).toContain('<div class="ili-text">cap</div>');
+    expect(renderBodyToHtml(aligned("center;color:red"))).toContain('<div class="ili-text">cap</div>');
+  });
 });
 
 describe("renderBodyToHtml — carousel", () => {

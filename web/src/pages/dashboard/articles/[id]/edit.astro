@@ -346,6 +346,12 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
           applySrc(node);
           const content = document.createElement("div");
           content.className = "ili-text";
+          // TextAlign's `textAlign` attr can't reach a NodeView's DOM on its
+          // own, so mirror it onto the excerpt div ourselves.
+          const applyAlign = (n: typeof node) => {
+            content.style.textAlign = (n.attrs.textAlign as string) || "";
+          };
+          applyAlign(node);
           dom.appendChild(img);
           dom.appendChild(content);
           return {
@@ -354,6 +360,7 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
             update: (updated) => {
               if (updated.type.name !== "imageListItem") return false;
               applySrc(updated);
+              applyAlign(updated);
               return true;
             },
           };
@@ -529,7 +536,9 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
         ImageListItem,
         Carousel,
         TextAlign.configure({
-          types: ["paragraph", "heading"],
+          // imageListItem holds its excerpt as inline content directly, so
+          // aligning it aligns the excerpt text (applied to .ili-text below).
+          types: ["paragraph", "heading", "imageListItem"],
           alignments: [...ALIGNMENTS],
           defaultAlignment: null,
         }),
@@ -1195,8 +1204,8 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
   }
   .editor-surface :global(.ili-thumb) {
     flex: 0 0 auto;
-    width: 72px;
-    height: 72px;
+    width: 144px;
+    height: 144px;
     object-fit: cover;
     border: 2px solid var(--lime);
     /* Override the generic ProseMirror img rule (block + auto margins). */
@@ -1531,8 +1540,8 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
   }
   .readonly .body :global(.ili-thumb) {
     flex: 0 0 auto;
-    width: 72px;
-    height: 72px;
+    width: 144px;
+    height: 144px;
     object-fit: cover;
     border: 2px solid var(--lime);
     margin: 0;

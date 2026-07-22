@@ -666,6 +666,9 @@ test("E2E-59 editor: build a two-item image list, both thumbnails + excerpts ren
   // First item appears; cursor is in its excerpt.
   await expect(page.locator(".ProseMirror .ili")).toHaveCount(1, { timeout: 10_000 });
   await page.keyboard.type("First caption");
+  // The excerpt text is alignable (imageListItem is in the TextAlign types).
+  await page.locator('[data-cmd="alignCenter"]').click();
+  await expect(page.locator('[data-cmd="alignCenter"]')).toHaveClass(/is-active/);
 
   // Enter in a non-empty item prompts for the next image (the async keymap path
   // that the toolbar mousedown-preventDefault makes possible — keystrokes must
@@ -706,11 +709,15 @@ test("E2E-59 editor: build a two-item image list, both thumbnails + excerpts ren
   const thumbs = page.locator(".body .ili-thumb");
   await expect(thumbs).toHaveCount(2);
   await expect(thumbs.first()).toBeVisible();
-  // The image is reduced to a small thumbnail "bullet", not a full-width image.
+  // The image is a bounded thumbnail "bullet" (168px), not a full-width image.
   const thumbBox = (await thumbs.first().boundingBox())!;
-  expect(thumbBox.width).toBeLessThanOrEqual(90);
+  expect(thumbBox.width).toBeLessThanOrEqual(200);
   await expect(page.locator(".body .ili-text").first()).toHaveText("First caption");
   await expect(page.locator(".body .ili-text").nth(1)).toHaveText("Second caption");
+  // The first item's excerpt was center-aligned via the toolbar; the second
+  // keeps the default (computes to "start", the initial value).
+  await expect(page.locator(".body .ili-text").first()).toHaveCSS("text-align", "center");
+  await expect(page.locator(".body .ili-text").nth(1)).toHaveCSS("text-align", "start");
 });
 
 test("E2E-60 editor: insert a multi-image carousel; it renders a slideshow and the lightbox opens on the public page", async ({
