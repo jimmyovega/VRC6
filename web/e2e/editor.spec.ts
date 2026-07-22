@@ -712,3 +712,77 @@ test("E2E-59 editor: build a two-item image list, both thumbnails + excerpts ren
   await expect(page.locator(".body .ili-text").first()).toHaveText("First caption");
   await expect(page.locator(".body .ili-text").nth(1)).toHaveText("Second caption");
 });
+
+test("E2E-60 editor: insert a multi-image carousel; it renders a slideshow and the lightbox opens on the public page", async ({
+  page,
+}) => {
+  const title = `Carousel Story ${Date.now()}`;
+  await signUpAndLogin(page, `carousel-${Date.now()}@vrc6.com`);
+  await page.goto("/dashboard");
+  await page.getByRole("button", { name: "+ NEW ARTICLE" }).click();
+  await expect(page.locator("#art-title")).toBeVisible({ timeout: 15_000 });
+  await page.locator("#art-title").fill(title);
+
+  await page.locator(".ProseMirror").click();
+  // Body text so the draft is submittable (a carousel is an atom with no text).
+  await page.keyboard.type("A gallery of images.");
+  await page.keyboard.press("Enter");
+
+  // Three images, mixed orientation: two landscape (2:1 and 3:2) and one
+  // portrait. The viewport should size to the largest landscape ratio (2.0).
+  const files = [
+    { name: "wide.png", mimeType: "image/png", buffer: makePng(400, 200, [220, 40, 90]) },
+    { name: "tall.png", mimeType: "image/png", buffer: makePng(200, 400, [40, 90, 220]) },
+    { name: "mid.png", mimeType: "image/png", buffer: makePng(300, 200, [90, 220, 40]) },
+  ];
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    page.locator('[data-cmd="carousel"]').click(),
+  ]);
+  expect(chooser.isMultiple()).toBe(true);
+  await chooser.setFiles(files);
+
+  // The carousel NodeView renders all three slides in the editor.
+  await expect(page.locator(".ProseMirror .carousel")).toHaveCount(1, { timeout: 15_000 });
+  await expect(page.locator(".ProseMirror .carousel-slide")).toHaveCount(3);
+
+  await page.locator("#art-category").selectOption({ index: 1 });
+  await expect(page.locator("#save-status")).toHaveText("Saved ✓", { timeout: 10_000 });
+  await page.getByRole("button", { name: "SUBMIT FOR REVIEW" }).click();
+  await expect(page).toHaveURL(`${BASE}/dashboard`);
+
+  await page.context().clearCookies();
+  await signUpAndLogin(page, "owner@vrc6.com");
+  await gotoRetry(page, "/admin/review");
+  await page.locator(".review-row", { hasText: title }).getByRole("link", { name: title }).click();
+  await page.getByRole("button", { name: "APPROVE & PUBLISH" }).click();
+  await expect(page).toHaveURL(`${BASE}/admin/review`);
+
+  await page.context().clearCookies();
+  await gotoRetry(page, `/articles/${slugify(title)}`);
+
+  // Slideshow markup: one carousel, three slides, viewport sized to the
+  // shortest-landscape ratio (2.0), plus arrows + dots for a multi-image set.
+  const carousel = page.locator(".body .carousel");
+  await expect(carousel).toBeVisible();
+  await expect(page.locator(".body .carousel-slide")).toHaveCount(3);
+  await expect(page.locator(".body .carousel-viewport")).toHaveAttribute(
+    "style",
+    /aspect-ratio:\s*2\.0000/,
+  );
+  await expect(page.locator(".body .carousel-arrow.prev")).toBeVisible();
+  await expect(page.locator(".body .carousel-dot")).toHaveCount(3);
+
+  // Clicking a slide opens the gallery lightbox; arrow-right advances the
+  // counter; Escape closes it.
+  const lightbox = page.locator(".carousel-lightbox");
+  await expect(lightbox).toBeHidden();
+  await page.locator(".body .carousel-slide").first().click();
+  await expect(lightbox).toBeVisible();
+  await expect(lightbox.locator(".cl-img")).toBeVisible();
+  await expect(lightbox.locator(".cl-counter")).toHaveText("1 / 3");
+  await page.keyboard.press("ArrowRight");
+  await expect(lightbox.locator(".cl-counter")).toHaveText("2 / 3");
+  await page.keyboard.press("Escape");
+  await expect(lightbox).toBeHidden();
+});

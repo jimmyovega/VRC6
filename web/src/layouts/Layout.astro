@@ -340,4 +340,74 @@ const user = Astro.locals.user;
       flex: var(--bottom-share, 1);
     }
   }
+
+  /* ---- Carousel gallery lightbox ----
+     Created at runtime by lib/carousel-client.ts and appended to <body>, so it
+     lives outside any page's scoped styles — it must be styled globally. Shared
+     by the public article page and the editor's read-only preview. */
+  .carousel-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    background: rgba(2, 12, 6, 0.92);
+  }
+  .carousel-lightbox[hidden] {
+    display: none;
+  }
+  .carousel-lightbox .cl-img {
+    max-width: 92vw;
+    max-height: 86vh;
+    object-fit: contain;
+    border: 2px solid var(--lime);
+    box-shadow: 4px 4px 0 var(--phosphor);
+    background: var(--ink);
+  }
+  .carousel-lightbox button {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Press Start 2P", monospace;
+    color: var(--deep-moss);
+    background: var(--lime);
+    border: 2px solid var(--phosphor);
+    cursor: pointer;
+  }
+  .carousel-lightbox button[hidden] {
+    display: none;
+  }
+  .carousel-lightbox .cl-close {
+    top: 1rem;
+    right: 1rem;
+    width: 2.4rem;
+    height: 2.4rem;
+    font-size: 0.8rem;
+  }
+  .carousel-lightbox .cl-prev,
+  .carousel-lightbox .cl-next {
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2.6rem;
+    height: 3.2rem;
+    font-size: 1.2rem;
+  }
+  .carousel-lightbox .cl-prev {
+    left: 1rem;
+  }
+  .carousel-lightbox .cl-next {
+    right: 1rem;
+  }
+  .carousel-lightbox .cl-counter {
+    position: absolute;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: "Press Start 2P", monospace;
+    font-size: 0.5rem;
+    color: var(--lime);
+  }
 </style>

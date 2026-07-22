@@ -6,6 +6,8 @@
 // It also still understands the M1 seed shape ({ type: "paragraph", text }) so
 // existing/published articles keep rendering.
 
+import { carouselAspectRatioCss } from "./carousel";
+
 interface Mark {
   type: string;
   attrs?: Record<string, unknown>;
@@ -131,6 +133,45 @@ function renderNode(node: Node): string {
         ? `<img class="ili-thumb" src="${escapeHtml(src)}" alt="${alt}" loading="lazy" />`
         : "";
       return `<li class="ili">${img}<div class="ili-text">${renderInline(node)}</div></li>`;
+    }
+    case "carousel": {
+      // A one-at-a-time slideshow. Slides live in `attrs.images` (not content);
+      // drop any with an unsafe src, escape alt, and size the viewport to the
+      // shortest-landscape aspect ratio (a clamped numeric — see lib/carousel).
+      const raw = Array.isArray(node.attrs?.images) ? (node.attrs!.images as unknown[]) : [];
+      const images = raw
+        .map((im) => {
+          const rec = (im ?? {}) as Record<string, unknown>;
+          return { src: safeUrl(rec.src), alt: rec.alt, w: rec.w, h: rec.h };
+        })
+        .filter((im): im is { src: string; alt: unknown; w: unknown; h: unknown } => !!im.src);
+      if (images.length === 0) return "";
+      const ar = carouselAspectRatioCss(images);
+      const multi = images.length > 1;
+      const slides = images
+        .map(
+          (im, i) =>
+            `<button type="button" class="carousel-slide" data-index="${i}" aria-label="View image ${i + 1} of ${images.length}">` +
+            `<img src="${escapeHtml(im.src)}" alt="${escapeHtml(String(im.alt ?? ""))}" loading="lazy" /></button>`,
+        )
+        .join("");
+      const arrows = multi
+        ? '<button type="button" class="carousel-arrow prev" aria-label="Previous image">‹</button>' +
+          '<button type="button" class="carousel-arrow next" aria-label="Next image">›</button>'
+        : "";
+      const dots = multi
+        ? `<div class="carousel-dots">${images
+            .map(
+              (_im, i) =>
+                `<button type="button" class="carousel-dot" data-index="${i}" aria-label="Go to image ${i + 1}"></button>`,
+            )
+            .join("")}</div>`
+        : "";
+      return (
+        `<div class="carousel" data-carousel data-count="${images.length}">` +
+        `<div class="carousel-viewport" style="aspect-ratio:${ar}">` +
+        `<div class="carousel-track">${slides}</div>${arrows}</div>${dots}</div>`
+      );
     }
     default:
       // Unknown node: render children so nothing is silently dropped.
