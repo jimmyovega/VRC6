@@ -41,6 +41,11 @@ export default defineWorkersConfig(async () => {
               // no test ever makes a live Resend call.
               RESEND_API_KEY: "re_test_dummy_key",
               EMAIL_DISABLED: "1",
+              // Integration fixtures create users through auth.api.signUpEmail,
+              // which the invite-only gate blocks by default. Bound explicitly
+              // here so the suite doesn't depend on a local (gitignored)
+              // .dev.vars — CI has no such file and would otherwise diverge.
+              ALLOW_PUBLIC_SIGNUP: "1",
             },
           },
         },
