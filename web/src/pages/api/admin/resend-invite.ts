@@ -56,7 +56,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   try {
     await auth.api.requestPasswordReset({
       body: { email: target.email, redirectTo: "/reset-password" },
-      headers: internalHeaders(request.headers),
+      headers: await internalHeaders(request.headers),
     });
   } catch (err) {
     log.error("resend-invite email failed", {

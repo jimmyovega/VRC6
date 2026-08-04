@@ -68,7 +68,7 @@ export function getAuth() {
         // Trusted in-process calls (e.g. admin invite → signUpEmail /
         // requestPasswordReset) skip the public bot/rate protections AND the
         // invite-only sign-up gate below.
-        if (isInternalCall(ctx.headers)) return;
+        if (await isInternalCall(ctx.headers)) return;
 
         // Invite-only: reject public self-registration. This lives here rather
         // than in `emailAndPassword.disableSignUp` because that flag is checked

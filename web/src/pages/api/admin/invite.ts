@@ -48,7 +48,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   // Internal marker so these in-process calls skip the public Turnstile /
   // rate-limit before-hook.
-  const trusted = internalHeaders(request.headers);
+  const trusted = await internalHeaders(request.headers);
 
   const [existing] = await db
     .select({ id: schema.user.id, status: schema.user.status })

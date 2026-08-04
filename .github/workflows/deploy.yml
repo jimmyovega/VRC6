@@ -11,7 +11,15 @@ on:
 
 concurrency:
   group: deploy-${{ github.ref }}
-  cancel-in-progress: true
+  # NOT cancel-in-progress: this job applies remote D1 migrations, and killing
+  # it mid-migration can leave the remote database half-migrated.
+  cancel-in-progress: false
+
+# Least privilege. Without this the job token inherits the repository default,
+# which on older repos is write-all — on a public repo that hands any malicious
+# dependency in `npm ci` a write-capable token.
+permissions:
+  contents: read
 
 jobs:
   deploy:
@@ -32,7 +40,7 @@ jobs:
         run: npm ci
 
       - name: Apply D1 migrations (remote)
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -48,7 +56,7 @@ jobs:
           SENTRY_PROJECT: node-cloudflare-workers
 
       - name: Deploy
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

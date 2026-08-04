@@ -3,6 +3,8 @@
 // TURNSTILE_DISABLED is set, verification is bypassed so local dev / E2E / CI
 // don't need a live challenge. Production sets the real secret (and no bypass).
 import { env } from "cloudflare:workers";
+import { flagEnabled } from "./config-guard";
+import { log } from "./log";
 
 const tsEnv = env as typeof env & {
   TURNSTILE_SECRET_KEY?: string;
@@ -15,6 +17,13 @@ const SITEVERIFY_URL =
 
 // Cloudflare's "always passes" test site key — the default for dev/CI.
 export const TEST_SITE_KEY = "1x00000000000000000000AA";
+
+let bypassWarned = false;
+function warnBypassOnce(reason: string): void {
+  if (bypassWarned) return;
+  bypassWarned = true;
+  log.warn("turnstile verification bypassed for this isolate", { reason });
+}
 
 export function getTurnstileSiteKey(): string {
   return tsEnv.TURNSTILE_SITE_KEY ?? TEST_SITE_KEY;
@@ -44,8 +53,18 @@ export async function verifyTurnstile(
   remoteIp?: string,
 ): Promise<boolean> {
   const secret = tsEnv.TURNSTILE_SECRET_KEY;
-  if (tsEnv.TURNSTILE_DISABLED || !secret) {
-    console.log("[turnstile] verification bypassed (dev/disabled)");
+  if (flagEnabled(tsEnv.TURNSTILE_DISABLED) || !secret) {
+    // Reachable only in dev/CI: config-guard.ts refuses to boot in production
+    // with TURNSTILE_DISABLED set or TURNSTILE_SECRET_KEY missing, because this
+    // branch returns true — i.e. it fails OPEN — and the login form would still
+    // render a widget using the always-passes test site key.
+    //
+    // Warned once per isolate, not per request: the bypass is a static property
+    // of the configuration, so a per-request warning is pure noise. It also
+    // destabilises `wrangler dev` — a console warning on every auth request
+    // floods the inspector proxy until it drops the connection and takes the
+    // dev server down mid-test-run.
+    warnBypassOnce(secret ? "TURNSTILE_DISABLED" : "no TURNSTILE_SECRET_KEY");
     return true;
   }
   if (!token) return false;
