@@ -2,14 +2,15 @@
 // closes a specific gap from the security audit — none were set anywhere in
 // the app before this.
 //
-// CSP's main remaining job here is origin allowlisting (network/frame/image
-// loads) and closing clickjacking/plugin-content/base-form injection — see
-// the `'unsafe-inline'` note on buildCsp() for why script/style strictness
-// isn't part of what it delivers. The actual XSS boundary is `src/lib/body.ts`
-// (escapes text, allowlists URL schemes/CSS values) — verified directly
-// against its own test suite, not assumed. Every source listed below is
-// grounded in an actual usage in this codebase, found by grepping for every
-// external origin the app references — not copied from a generic template.
+// CSP here is strict: no `'unsafe-inline'` on script-src or style-src-elem
+// (see the doc comment on buildCsp() for the Astro build config that makes
+// that possible) plus origin allowlisting (network/frame/image loads) and
+// closing clickjacking/plugin-content/base-form injection. The actual XSS
+// boundary is still `src/lib/body.ts` (escapes text, allowlists URL
+// schemes/CSS values) — verified directly against its own test suite, not
+// assumed. Every source listed below is grounded in an actual usage in this
+// codebase, found by grepping for every external origin the app references —
+// not copied from a generic template.
 
 export interface SecurityHeadersEnv {
   MEDIA_BASE_URL?: string;
@@ -34,26 +35,19 @@ function originOf(url: string | undefined): string | null {
  * prod; unset in local dev/CI, where media serves same-origin through
  * `/media/<key>` instead — see `mediaUrl()` in lib/media.ts).
  *
- * - `script-src` / `style-src-elem` carry `'unsafe-inline'`. This was NOT the
- *   original design — Astro was verified to bundle every `<script>` and
- *   `<style>` block to a same-origin file, and that verification was correct
- *   for the CSS build output as a whole. What it missed: Astro inlines
- *   *some* of that same bundled output directly into the page's HTML when a
- *   script/style is small and page-specific — confirmed by a live CSP
- *   violation naming the exact culprits: Layout.astro's nav-toggle/logout
- *   script (every page) and Breadcrumb.astro's scoped styles (some pages).
- *   This is a build-time optimization, not something addressable by moving
- *   one file — any small component's styles can trigger it. Astro 6+ has a
- *   native hash-based `security.csp` feature built for exactly this, but it
- *   ships as a `<meta>` tag rather than a header, which can't carry
- *   `frame-ancestors` — losing the clickjacking protection below to gain
- *   script hashing wasn't the right trade. `'unsafe-inline'` here is a
- *   deliberate, narrower compromise: the app's actual XSS boundary is
- *   `body.ts`'s escaping/URL-scheme allowlisting (verified directly — see its
- *   test suite), not script-src strictness, so this CSP's real remaining
- *   value is everything below: origin allowlisting for network/frame/image
- *   loads, and closing clickjacking, plugin content, and base/form-target
- *   injection.
+ * - `script-src` / `style-src-elem` do NOT carry `'unsafe-inline'`. Getting
+ *   here took a real detour: Astro inlines small, page-specific
+ *   `<script>`/`<style>` blocks directly into HTML when they fall under
+ *   Vite's size-based inlining threshold — confirmed by a live CSP violation
+ *   naming the exact culprits, Layout.astro's nav-toggle/logout script and
+ *   Breadcrumb.astro's scoped styles. Fixed at the source in
+ *   `astro.config.mjs`: `build.inlineStylesheets: 'never'` plus
+ *   `vite.build.assetsInlineLimit: 0` force every script/style external
+ *   unconditionally, so the inlining this policy would otherwise need to
+ *   tolerate never happens. (That fix relies on the app having zero framework
+ *   islands — no `client:*` hydration — since Astro's own inlining controls
+ *   are known to not apply to island-generated scripts/styles; re-check this
+ *   note if a framework integration is ever added.)
  * - `frame-ancestors 'none'`: closes the clickjacking finding — the site was
  *   fully framable, including `/dashboard`, `/admin`, and
  *   `/dashboard/security` (2FA disable).
@@ -63,8 +57,8 @@ export function buildCsp(env: SecurityHeadersEnv): string {
   const imgSrc = ["'self'", mediaOrigin].filter((v): v is string => v !== null).join(" ");
   return [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline' ${CLOUDFLARE_CHALLENGES}`,
-    `style-src-elem 'self' 'unsafe-inline' ${GOOGLE_FONTS_CSS}`,
+    `script-src 'self' ${CLOUDFLARE_CHALLENGES}`,
+    `style-src-elem 'self' ${GOOGLE_FONTS_CSS}`,
     "style-src-attr 'unsafe-inline'",
     `font-src 'self' ${GOOGLE_FONTS_STATIC}`,
     `img-src ${imgSrc}`,

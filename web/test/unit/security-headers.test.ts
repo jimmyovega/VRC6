@@ -21,20 +21,19 @@ describe("buildCsp", () => {
     expect(csp).toContain("connect-src 'self' https://challenges.cloudflare.com");
   });
 
-  it("script-src and style-src-elem allow inline — see the doc comment for why", () => {
-    // Astro inlines small, page-specific <script>/<style> blocks directly into
-    // the HTML at build time (confirmed via a live CSP violation, not assumed)
-    // — this isn't scoped to one file, so hash/nonce-based strictness isn't
-    // practical without switching to Astro's own meta-tag CSP, which can't
-    // carry frame-ancestors. script-src/style-src-elem trade inline-injection
-    // strictness for that; style-src-attr already allowed inline for the
-    // renderer's own sanctioned alignment/aspect-ratio attributes.
+  it("script-src and style-src-elem never allow inline", () => {
+    // astro.config.mjs forces every script/style external
+    // (build.inlineStylesheets: 'never' + vite.build.assetsInlineLimit: 0),
+    // so neither directive needs 'unsafe-inline' — verified live via a
+    // wrangler dev build with zero inline <script>/<style> in the rendered
+    // HTML. style-src-attr still allows inline for the renderer's own
+    // sanctioned alignment/aspect-ratio attributes — unrelated to this.
     const csp = buildCsp({});
     const scriptSrc = csp.split(";").find((d) => d.trim().startsWith("script-src"));
     const styleElem = csp.split(";").find((d) => d.trim().startsWith("style-src-elem"));
-    expect(scriptSrc).toContain("'unsafe-inline'");
+    expect(scriptSrc).not.toContain("'unsafe-inline'");
     expect(scriptSrc).toContain("'self'");
-    expect(styleElem).toContain("'unsafe-inline'");
+    expect(styleElem).not.toContain("'unsafe-inline'");
     expect(styleElem).toContain("https://fonts.googleapis.com");
   });
 
