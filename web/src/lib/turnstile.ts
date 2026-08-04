@@ -18,6 +18,13 @@ const SITEVERIFY_URL =
 // Cloudflare's "always passes" test site key — the default for dev/CI.
 export const TEST_SITE_KEY = "1x00000000000000000000AA";
 
+let bypassWarned = false;
+function warnBypassOnce(reason: string): void {
+  if (bypassWarned) return;
+  bypassWarned = true;
+  log.warn("turnstile verification bypassed for this isolate", { reason });
+}
+
 export function getTurnstileSiteKey(): string {
   return tsEnv.TURNSTILE_SITE_KEY ?? TEST_SITE_KEY;
 }
@@ -51,9 +58,13 @@ export async function verifyTurnstile(
     // with TURNSTILE_DISABLED set or TURNSTILE_SECRET_KEY missing, because this
     // branch returns true — i.e. it fails OPEN — and the login form would still
     // render a widget using the always-passes test site key.
-    log.warn("turnstile verification bypassed", {
-      reason: secret ? "TURNSTILE_DISABLED" : "no TURNSTILE_SECRET_KEY",
-    });
+    //
+    // Warned once per isolate, not per request: the bypass is a static property
+    // of the configuration, so a per-request warning is pure noise. It also
+    // destabilises `wrangler dev` — a console warning on every auth request
+    // floods the inspector proxy until it drops the connection and takes the
+    // dev server down mid-test-run.
+    warnBypassOnce(secret ? "TURNSTILE_DISABLED" : "no TURNSTILE_SECRET_KEY");
     return true;
   }
   if (!token) return false;
