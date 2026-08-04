@@ -30,7 +30,25 @@ const authEnv = env as typeof env & {
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
   ADMIN_EMAIL?: string;
+  ALLOW_PUBLIC_SIGNUP?: string;
 };
+
+// VRC6 is invite-only: accounts are created by an admin via /api/admin/invite,
+// which drives better-auth's sign-up internally. The public
+// POST /api/auth/sign-up/email endpoint is therefore closed unless explicitly
+// opted into — the E2E suite sets ALLOW_PUBLIC_SIGNUP=1 in .dev.vars because it
+// registers its fixture accounts through that endpoint.
+//
+// Fails CLOSED on the exact string "1". Deliberately NOT truthiness-based: the
+// strings "0" and "false" are both truthy in JS, so `!!flag` would have opened
+// registration for config that plainly reads as "off".
+export function signupFlagOpen(flag: string | undefined): boolean {
+  return flag === "1";
+}
+
+export function publicSignupAllowed(): boolean {
+  return signupFlagOpen(authEnv.ALLOW_PUBLIC_SIGNUP);
+}
 
 let cached: ReturnType<typeof betterAuth> | null = null;
 
@@ -47,9 +65,20 @@ export function getAuth() {
       // sent in the `x-turnstile-token` header so it doesn't collide with the
       // better-auth request body schema.
       before: createAuthMiddleware(async (ctx) => {
-        // Trusted in-process calls (e.g. admin invite → requestPasswordReset)
-        // skip the public bot/rate protections.
+        // Trusted in-process calls (e.g. admin invite → signUpEmail /
+        // requestPasswordReset) skip the public bot/rate protections AND the
+        // invite-only sign-up gate below.
         if (isInternalCall(ctx.headers)) return;
+
+        // Invite-only: reject public self-registration. This lives here rather
+        // than in `emailAndPassword.disableSignUp` because that flag is checked
+        // unconditionally and would also break the admin invite flow, which
+        // reaches sign-up as an internal call (exempted above).
+        if (ctx.path === "/sign-up/email" && !publicSignupAllowed()) {
+          throw new APIError("FORBIDDEN", {
+            message: "Public sign-up is disabled. VRC6 accounts are created by invitation.",
+          });
+        }
 
         const ip =
           ctx.headers?.get("cf-connecting-ip") ??
@@ -94,6 +123,9 @@ export function getAuth() {
     }),
     emailAndPassword: {
       enabled: true,
+      // NB: sign-up is closed in the `before` hook, NOT via better-auth's
+      // `disableSignUp` — that option is checked unconditionally and would also
+      // reject the admin invite flow, which drives sign-up server-side.
       minPasswordLength: 12,
       // Activation links reuse this reset-token flow, so the default 1h is too
       // short for an invite; 12h balances invitee convenience against exposure.

@@ -55,6 +55,7 @@ jobs:
           echo "TURNSTILE_DISABLED=1" >> .dev.vars
           echo "RATE_LIMIT_DISABLED=1" >> .dev.vars
           echo "EMAIL_DISABLED=1" >> .dev.vars
+          echo "ALLOW_PUBLIC_SIGNUP=1" >> .dev.vars
 
       - name: Set up local D1 (build + migrate + seed)
         run: npm run e2e:setup

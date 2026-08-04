@@ -4,8 +4,13 @@ import Layout from "../../../layouts/Layout.astro";
 import { getDb, schema } from "../../../db";
 import { getArticlesForAdmin, getAuthorOptions, getCategoryOptions } from "../../../db/queries";
 import { formatDate } from "../../../lib/date";
+import { isAdmin } from "../../../lib/permissions";
 
-// Admin-only — enforced in middleware (/admin/*).
+// Admin-only. Re-checked here as well as in middleware — see audit.astro.
+if (!isAdmin(Astro.locals.user)) {
+  return Astro.locals.user ? Astro.redirect("/dashboard") : Astro.redirect("/login");
+}
+
 const db = getDb(env.DB);
 const PAGE_SIZE = 20;
 

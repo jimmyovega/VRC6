@@ -11,6 +11,13 @@ BETTER_AUTH_URL=http://localhost:8788
 # Comma-separated emails that become active admins on sign-up.
 ADMIN_EMAIL=you@example.com
 
+# --- Sign-up policy ---
+# VRC6 is invite-only: the public POST /api/auth/sign-up/email endpoint is
+# CLOSED unless this is exactly "1". Admin invites are unaffected (they reach
+# sign-up as a trusted internal call). The E2E suite needs this on because it
+# registers its fixture accounts through that endpoint. Do NOT set it in prod.
+ALLOW_PUBLIC_SIGNUP=1
+
 # --- Email (Resend) ---
 # Optional in dev: with EMAIL_DEBUG=1 (or no key) emails are logged, not sent.
 RESEND_API_KEY=
