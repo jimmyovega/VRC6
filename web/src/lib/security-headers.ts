@@ -72,7 +72,10 @@ export function buildCsp(env: SecurityHeadersEnv): string {
 
 /** Applies every security header to a mutable Headers instance in place. */
 export function applySecurityHeaders(headers: Headers, env: SecurityHeadersEnv): void {
-  headers.set("Content-Security-Policy", buildCsp(env));
+  // DIAGNOSTIC: CSP itself disabled to bisect the CI E2E anomaly against HSTS
+  // (localhost + non-HTTPS is a known-sensitive combination for it). NOT for merge.
+  // headers.set("Content-Security-Policy", buildCsp(env));
+  void buildCsp;
   // Prevents a stored payload (e.g. an upload whose declared content-type
   // doesn't match its bytes) from being MIME-sniffed into something
   // executable. Pairs with the upload magic-byte check.

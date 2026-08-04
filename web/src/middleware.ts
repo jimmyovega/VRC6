@@ -96,9 +96,10 @@ export const onRequest = defineMiddleware((context, next) => {
       // `wrangler dev`, CI, and production all serve — so unlike the
       // *_DISABLED runtime flags, there is no way to "leave this on" in a real
       // deployment.
-      // DIAGNOSTIC: also disabled — origin-check disable alone didn't fix the
-      // CI anomaly, so testing whether this is the cause instead. NOT for merge.
-      if (false && !import.meta.env.DEV) applySecurityHeaders(response.headers, env);
+      // DIAGNOSTIC: re-enabled with CSP itself stubbed out inside
+      // security-headers.ts, to bisect CSP vs the other headers (HSTS is the
+      // next suspect). NOT for merge in this state.
+      if (!import.meta.env.DEV) applySecurityHeaders(response.headers, env);
       return response;
     } catch (err) {
       // Unhandled errors are logged with the trace id so they can be found in
