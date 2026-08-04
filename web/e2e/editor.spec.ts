@@ -283,16 +283,18 @@ test("E2E-46 editor: uploading an image inserts it and serves it back", async ({
   ]);
   await chooser.setFiles({ name: "pixel.png", mimeType: "image/png", buffer: png });
 
-  // The uploaded image is inserted into the editor with a /media URL (dev fallback).
+  // The uploaded image is inserted into the editor with a /media URL (dev
+  // fallback). Uploads are converted to WebP server-side, so the stored key
+  // and content-type are .webp/image-webp regardless of the source format.
   const img = page.locator(".ProseMirror img");
   await expect(img).toHaveCount(1, { timeout: 10_000 });
   const src = await img.getAttribute("src");
-  expect(src).toMatch(/^\/media\/articles\/[0-9a-f-]{36}\.png$/);
+  expect(src).toMatch(/^\/media\/articles\/[0-9a-f-]{36}\.webp$/);
 
   // And that URL streams the bytes back from R2 with an image content-type.
   const res = await page.request.get(src!);
   expect(res.status()).toBe(200);
-  expect(res.headers()["content-type"]).toContain("image/png");
+  expect(res.headers()["content-type"]).toContain("image/webp");
 });
 
 test("E2E-53 editor: upload a cover image, it shows on the homepage card and detail hero, and can be removed", async ({
