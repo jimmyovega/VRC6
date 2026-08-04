@@ -5,6 +5,8 @@ import { getDb } from "./db";
 import { getAuth } from "./lib/auth";
 import { getMaintenanceStatus } from "./lib/maintenance";
 import { log, runWithRequestId } from "./lib/log";
+import { applySecurityHeaders } from "./lib/security-headers";
+import { originIsTrusted, requiresOriginCheck } from "./lib/origin-check";
 
 // Paths anonymous visitors can still reach while maintenance mode is on — the
 // full sign-in flow (so staff can log in) plus the maintenance page itself.
@@ -26,6 +28,21 @@ export const onRequest = defineMiddleware((context, next) => {
     // checks below (`=== "/admin"`, `startsWith("/admin/")`) silently miss.
     const path = context.url.pathname;
     try {
+      // CSRF: reject any state-changing request whose Origin is present and
+      // doesn't match this site. Applies uniformly, including /api/auth/* —
+      // better-auth already runs its own equivalent check there, and letting
+      // this one cover it too means there's a single, simple rule to reason
+      // about rather than a carve-out that has to stay correct forever. See
+      // lib/origin-check.ts for why an ABSENT Origin is allowed through.
+      if (
+        requiresOriginCheck(context.request.method) &&
+        !originIsTrusted(context.request.headers.get("origin"), context.url.origin)
+      ) {
+        const rejected = new Response("Forbidden — origin mismatch.", { status: 403 });
+        rejected.headers.set("x-trace-id", requestId);
+        return rejected;
+      }
+
       const result = await getAuth().api.getSession({ headers: context.request.headers });
       const user = (result?.user ?? null) as App.Locals["user"];
       context.locals.user = user;
@@ -45,6 +62,7 @@ export const onRequest = defineMiddleware((context, next) => {
           const rendered = await context.rewrite("/maintenance");
           const gated = new Response(rendered.body, { status: 503, headers: rendered.headers });
           gated.headers.set("x-trace-id", requestId);
+          if (!import.meta.env.DEV) applySecurityHeaders(gated.headers, env);
           return gated;
         }
       }
@@ -59,6 +77,14 @@ export const onRequest = defineMiddleware((context, next) => {
 
       const response = await next();
       response.headers.set("x-trace-id", requestId);
+      // Skipped only under `astro dev` (Vite's HMR dev server), which injects
+      // <style> tags and eval-based sourcemaps at runtime that a strict CSP
+      // would legitimately block. `import.meta.env.DEV` is a build-time
+      // constant baked by Vite — always false in the built output that
+      // `wrangler dev`, CI, and production all serve — so unlike the
+      // *_DISABLED runtime flags, there is no way to "leave this on" in a real
+      // deployment.
+      if (!import.meta.env.DEV) applySecurityHeaders(response.headers, env);
       return response;
     } catch (err) {
       // Unhandled errors are logged with the trace id so they can be found in

@@ -15,6 +15,68 @@ export function isAllowedImageType(type: string): boolean {
   return type in TYPE_EXT;
 }
 
+/**
+ * Identifies an image's real content-type from its magic bytes, independent
+ * of whatever `Content-Type` the client declared on the multipart part.
+ *
+ * `isAllowedImageType` above only checks the client's own claim, which is
+ * fully attacker-controlled — a request can declare `image/png` on a part
+ * containing arbitrary bytes (HTML, JS, an executable), and it would pass
+ * that check, get stored, and be re-served under the declared type. This is
+ * the actual security boundary: the upload route must sniff the bytes it
+ * received and use THAT to decide the stored content-type and extension,
+ * never the client's declaration.
+ *
+ * Deliberately excludes SVG (a `data:`/script-bearing XML format) even though
+ * it's a normal "image" — same reasoning as its absence from TYPE_EXT.
+ */
+export function sniffImageType(bytes: Uint8Array): string | null {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+  if (
+    bytes.length >= 6 &&
+    bytes[0] === 0x47 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x38 &&
+    (bytes[4] === 0x37 || bytes[4] === 0x39) &&
+    bytes[5] === 0x61
+  ) {
+    return "image/gif";
+  }
+  // WebP is a RIFF container: "RIFF" + 4-byte size + "WEBP". Checking both
+  // markers (not just the RIFF prefix) excludes other RIFF-based formats
+  // (WAV, AVI, etc.) from being accepted as an image.
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  return null;
+}
+
 export function extForType(type: string): string | null {
   return TYPE_EXT[type] ?? null;
 }

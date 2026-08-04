@@ -78,35 +78,49 @@ function renderMarks(html: string, marks: Mark[] = []): string {
   return html;
 }
 
-function renderChildren(node: Node): string {
-  return (node.content ?? []).map(renderNode).join("");
+// A legitimate article body is rarely more than a few levels deep — a
+// blockquote containing a list containing a paragraph is 3. This cap exists
+// only to stop a maliciously (or accidentally) deeply-nested body — still well
+// inside MAX_BODY_BYTES, since `{"type":"x","content":[` repeated costs only
+// ~24 bytes per level — from recursing until the Workers isolate's stack
+// overflows. Before this, that crash happened on every request to the
+// published article, permanently, since the stored body never changes. Past
+// the cap we render/count nothing further; we never throw, matching this
+// renderer's existing "drop rather than crash" posture everywhere else
+// (unsafe URLs, non-allowlisted alignment, unknown node types).
+const MAX_NODE_DEPTH = 64;
+
+function renderChildren(node: Node, depth: number): string {
+  if (depth > MAX_NODE_DEPTH) return "";
+  return (node.content ?? []).map((child) => renderNode(child, depth + 1)).join("");
 }
 
 // Inline content of a block: TipTap children, or M1's text-on-the-block shape.
-function renderInline(node: Node): string {
-  if (node.content) return renderChildren(node);
+function renderInline(node: Node, depth: number): string {
+  if (node.content) return renderChildren(node, depth);
   if (typeof node.text === "string") return escapeHtml(node.text);
   return "";
 }
 
-function renderNode(node: Node): string {
+function renderNode(node: Node, depth = 0): string {
+  if (depth > MAX_NODE_DEPTH) return "";
   switch (node.type) {
     case "text":
       return renderMarks(escapeHtml(node.text ?? ""), node.marks);
     case "paragraph":
-      return `<p${alignStyleAttr(node)}>${renderInline(node)}</p>`;
+      return `<p${alignStyleAttr(node)}>${renderInline(node, depth)}</p>`;
     case "heading": {
       const level = Math.min(6, Math.max(1, Number(node.attrs?.level) || 2));
-      return `<h${level}${alignStyleAttr(node)}>${renderInline(node)}</h${level}>`;
+      return `<h${level}${alignStyleAttr(node)}>${renderInline(node, depth)}</h${level}>`;
     }
     case "bulletList":
-      return `<ul>${renderChildren(node)}</ul>`;
+      return `<ul>${renderChildren(node, depth)}</ul>`;
     case "orderedList":
-      return `<ol>${renderChildren(node)}</ol>`;
+      return `<ol>${renderChildren(node, depth)}</ol>`;
     case "listItem":
-      return `<li>${renderChildren(node) || renderInline(node)}</li>`;
+      return `<li>${renderChildren(node, depth) || renderInline(node, depth)}</li>`;
     case "blockquote":
-      return `<blockquote>${renderChildren(node) || renderInline(node)}</blockquote>`;
+      return `<blockquote>${renderChildren(node, depth) || renderInline(node, depth)}</blockquote>`;
     case "codeBlock":
       return `<pre><code>${escapeHtml(bodyToText(node))}</code></pre>`;
     case "horizontalRule":
@@ -123,7 +137,7 @@ function renderNode(node: Node): string {
       return `<img src="${escapeHtml(src)}" alt="${alt}" loading="lazy"${alignAttr} />`;
     }
     case "imageList":
-      return `<ul class="image-list">${renderChildren(node)}</ul>`;
+      return `<ul class="image-list">${renderChildren(node, depth)}</ul>`;
     case "imageListItem": {
       // Each item = a thumbnail "bullet" (safeUrl'd, else omitted) beside a
       // rich-text excerpt (escaped + mark-allowlisted via renderInline).
@@ -132,7 +146,7 @@ function renderNode(node: Node): string {
       const img = src
         ? `<img class="ili-thumb" src="${escapeHtml(src)}" alt="${alt}" loading="lazy" />`
         : "";
-      return `<li class="ili">${img}<div class="ili-text"${alignStyleAttr(node)}>${renderInline(node)}</div></li>`;
+      return `<li class="ili">${img}<div class="ili-text"${alignStyleAttr(node)}>${renderInline(node, depth)}</div></li>`;
     }
     case "carousel": {
       // A one-at-a-time slideshow. Slides live in `attrs.images` (not content);
@@ -175,7 +189,7 @@ function renderNode(node: Node): string {
     }
     default:
       // Unknown node: render children so nothing is silently dropped.
-      return renderChildren(node);
+      return renderChildren(node, depth);
   }
 }
 
@@ -200,16 +214,25 @@ export function isDocJson(value: unknown): value is Node {
 export function renderBodyToHtml(body: unknown): string {
   const doc = body as Node | null;
   if (!doc || !Array.isArray(doc.content)) return "";
-  return doc.content.map(renderNode).join("\n");
+  // NB: `.map((n) => renderNode(n, 0))`, not bare `.map(renderNode)` — Array#map
+  // also passes (element, index, array) to its callback, and renderNode's 2nd
+  // parameter is `depth`, so a bare reference here would seed each top-level
+  // node's depth counter from its array index instead of 0.
+  return doc.content.map((n) => renderNode(n, 0)).join("\n");
 }
 
-/** Flatten the body JSON to plain text (for word counts, code blocks, etc.). */
-export function bodyToText(body: unknown): string {
+/**
+ * Flatten the body JSON to plain text (for word counts, code blocks, etc.).
+ * Depth-capped independently of renderNode/renderChildren — readingTimeMinutes
+ * calls this directly on the whole document root, so it needs its own guard
+ * against a deeply-nested body rather than inheriting the renderer's.
+ */
+export function bodyToText(body: unknown, depth = 0): string {
   const node = body as Node | null;
-  if (!node) return "";
+  if (!node || depth > MAX_NODE_DEPTH) return "";
   if (typeof node.text === "string") return node.text;
   return (node.content ?? [])
-    .map(bodyToText)
+    .map((child) => bodyToText(child, depth + 1))
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
