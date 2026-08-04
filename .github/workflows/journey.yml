@@ -9,6 +9,10 @@ on:
     - cron: "0 6 * * *"
   workflow_dispatch:
 
+# Least privilege — see deploy.yml.
+permissions:
+  contents: read
+
 jobs:
   journey:
     runs-on: ubuntu-latest
@@ -39,6 +43,7 @@ jobs:
           echo "RATE_LIMIT_DISABLED=1" >> .dev.vars
           echo "EMAIL_DISABLED=1" >> .dev.vars
           echo "ALLOW_PUBLIC_SIGNUP=1" >> .dev.vars
+          echo "SENTRY_ENVIRONMENT=ci" >> .dev.vars
 
       - name: Set up local D1 (build + migrate + seed)
         run: npm run e2e:setup

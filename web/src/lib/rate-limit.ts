@@ -5,6 +5,7 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { getDb } from "../db";
 import { authRateLimit } from "../db/schema";
+import { flagEnabled } from "./config-guard";
 
 const rlEnv = env as typeof env & { RATE_LIMIT_DISABLED?: string };
 
@@ -13,7 +14,10 @@ type DB = ReturnType<typeof getDb>;
 export type RateLimitResult = { allowed: boolean; retryAfter: number };
 
 export function rateLimitDisabled(): boolean {
-  return !!rlEnv.RATE_LIMIT_DISABLED;
+  // Exact "1" — `!!"0"` and `!!"false"` are both true, so truthiness would
+  // disable the limiter for config that reads as off. See config-guard.ts,
+  // which also refuses to boot with this set in production.
+  return flagEnabled(rlEnv.RATE_LIMIT_DISABLED);
 }
 
 // Per-path limits (relative paths under /api/auth). Tunable; deliberately

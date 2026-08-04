@@ -3,6 +3,8 @@
 // TURNSTILE_DISABLED is set, verification is bypassed so local dev / E2E / CI
 // don't need a live challenge. Production sets the real secret (and no bypass).
 import { env } from "cloudflare:workers";
+import { flagEnabled } from "./config-guard";
+import { log } from "./log";
 
 const tsEnv = env as typeof env & {
   TURNSTILE_SECRET_KEY?: string;
@@ -44,8 +46,14 @@ export async function verifyTurnstile(
   remoteIp?: string,
 ): Promise<boolean> {
   const secret = tsEnv.TURNSTILE_SECRET_KEY;
-  if (tsEnv.TURNSTILE_DISABLED || !secret) {
-    console.log("[turnstile] verification bypassed (dev/disabled)");
+  if (flagEnabled(tsEnv.TURNSTILE_DISABLED) || !secret) {
+    // Reachable only in dev/CI: config-guard.ts refuses to boot in production
+    // with TURNSTILE_DISABLED set or TURNSTILE_SECRET_KEY missing, because this
+    // branch returns true — i.e. it fails OPEN — and the login form would still
+    // render a widget using the always-passes test site key.
+    log.warn("turnstile verification bypassed", {
+      reason: secret ? "TURNSTILE_DISABLED" : "no TURNSTILE_SECRET_KEY",
+    });
     return true;
   }
   if (!token) return false;

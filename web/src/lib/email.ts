@@ -1,6 +1,7 @@
 // Email sending via Resend. With no RESEND_API_KEY (local dev / tests), emails
 // are logged to the console instead of sent, so flows stay testable offline.
 import { env } from "cloudflare:workers";
+import { flagEnabled, isProduction } from "./config-guard";
 import { log } from "./log";
 
 const emailEnv = env as typeof env & {
@@ -24,12 +25,24 @@ export async function sendEmail(opts: {
   // Log-only (never a live send) when there's no key OR an explicit disable flag
   // (dev / E2E / CI, so tests don't depend on Resend). EMAIL_DEBUG logs the mail
   // AND still sends — handy for grabbing activation/reset links during dev.
-  const logOnly = !key || !!emailEnv.EMAIL_DISABLED;
-  if (logOnly || emailEnv.EMAIL_DEBUG) {
+  const logOnly = !key || flagEnabled(emailEnv.EMAIL_DISABLED);
+  if (logOnly || flagEnabled(emailEnv.EMAIL_DEBUG)) {
+    // The body is the sensitive part: for invite and password-reset mail it
+    // holds a live, single-use, 12h activation link (auth.ts sendResetPassword).
+    // Workers Logs are readable by anyone with dashboard access, so emitting it
+    // in production would hand out working account-takeover URLs.
+    //
+    // Including it is genuinely useful locally (it's how you grab an activation
+    // link without a mail provider), so it's gated on the environment rather
+    // than dropped. Two independent things must hold — a non-production
+    // environment AND an explicit flag — and config-guard.ts separately refuses
+    // to boot in production with either flag set or RESEND_API_KEY missing,
+    // which are the only three ways to reach this branch at all.
+    const safeToLogBody = !isProduction(emailEnv as Record<string, unknown>);
     log.info("email dev-logged", {
       to: opts.to,
       subject: opts.subject,
-      body: opts.text ?? opts.html,
+      ...(safeToLogBody ? { body: opts.text ?? opts.html } : {}),
     });
   }
   if (logOnly) {

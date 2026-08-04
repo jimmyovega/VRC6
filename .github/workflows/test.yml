@@ -6,6 +6,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Least privilege — see deploy.yml. This one runs on pull_request, so it
+# executes `npm ci` over branch-supplied lockfiles; the token it can reach
+# should be read-only.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -56,6 +62,7 @@ jobs:
           echo "RATE_LIMIT_DISABLED=1" >> .dev.vars
           echo "EMAIL_DISABLED=1" >> .dev.vars
           echo "ALLOW_PUBLIC_SIGNUP=1" >> .dev.vars
+          echo "SENTRY_ENVIRONMENT=ci" >> .dev.vars
 
       - name: Set up local D1 (build + migrate + seed)
         run: npm run e2e:setup
