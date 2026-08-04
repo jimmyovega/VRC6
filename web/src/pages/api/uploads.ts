@@ -9,7 +9,14 @@ import {
 } from "../../lib/media";
 import { log } from "../../lib/log";
 
-const mediaEnv = env as typeof env & { MEDIA: R2Bucket; MEDIA_BASE_URL?: string };
+const mediaEnv = env as typeof env & {
+  MEDIA: R2Bucket;
+  MEDIA_BASE_URL?: string;
+  IMAGES: ImagesBinding;
+};
+
+/** Quality passed to the Images binding's WebP encoder — a standard balance of size vs fidelity. */
+const WEBP_QUALITY = 80;
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -59,9 +66,49 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ error: "The file's content doesn't match a supported image type." }, 415);
   }
 
-  const key = newImageKey(sniffed)!;
-  await mediaEnv.MEDIA.put(key, bytes, {
-    httpMetadata: { contentType: sniffed },
+  // Every accepted upload — including ones already sniffed as image/webp — is
+  // re-encoded through the Images binding, so every stored key is a genuine
+  // WebP at a known quality, not just whatever compression the uploader's own
+  // tool happened to produce. Smaller stored/served bytes = faster page loads
+  // on a site that renders many images per page.
+  let webp: ArrayBuffer;
+  try {
+    // The Images binding's input requires a stream with a known length — a
+    // plain ReadableStream (including one re-derived from a parsed multipart
+    // part) doesn't carry that, so the bytes are piped through a
+    // FixedLengthStream (the Workers runtime's purpose-built type for this)
+    // instead. The transform's own output stream has the same constraint and
+    // R2's put() would hit it too if handed the stream directly, so the
+    // result is buffered to an ArrayBuffer here rather than streamed straight
+    // into R2 — fine at this size (uploads are capped at 5 MB).
+    const { readable, writable } = new FixedLengthStream(bytes.byteLength);
+    const writer = writable.getWriter();
+    // Deliberately not awaited here — must run concurrently with .input()
+    // below reading the other end, not sequentially before it. Errors are
+    // still surfaced: a write failure aborts the readable side, so .input()'s
+    // own read rejects and is caught below; this just stops it from also
+    // surfacing as an unhandled promise rejection.
+    void writer
+      .write(new Uint8Array(bytes))
+      .then(() => writer.close())
+      .catch((err) => writer.abort(err));
+
+    const transformed = await mediaEnv.IMAGES.input(readable)
+      .transform({})
+      .output({ format: "image/webp", quality: WEBP_QUALITY });
+    webp = await transformed.response().arrayBuffer();
+  } catch (err) {
+    log.error("image conversion failed", {
+      userId: actor.id,
+      sniffed,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return json({ error: "Couldn't process that image. Try a different file." }, 500);
+  }
+
+  const key = newImageKey("image/webp")!;
+  await mediaEnv.MEDIA.put(key, webp, {
+    httpMetadata: { contentType: "image/webp" },
   });
   log.info("media uploaded", { userId: actor.id, key, size: file.size });
 

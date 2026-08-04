@@ -26,6 +26,9 @@
 			"bucket_name": "vrc6-media"
 		}
 	],
+	"images": {
+		"binding": "IMAGES"
+	},
 	"observability": {
 		"enabled": true
 	}
