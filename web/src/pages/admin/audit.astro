@@ -4,8 +4,14 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { desc, eq } from "drizzle-orm";
 import Layout from "../../layouts/Layout.astro";
 import { getDb, schema } from "../../db";
+import { isAdmin } from "../../lib/permissions";
 
-// Admin-only — enforced in middleware.
+// Admin-only. The middleware gates /admin/* too, but this page re-checks so a
+// single middleware regression can't expose the audit trail (incl. emails).
+if (!isAdmin(Astro.locals.user)) {
+  return Astro.locals.user ? Astro.redirect("/dashboard") : Astro.redirect("/login");
+}
+
 const db = getDb(env.DB);
 const actor = alias(schema.user, "actor");
 const target = alias(schema.user, "target");

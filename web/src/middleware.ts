@@ -19,7 +19,12 @@ export const onRequest = defineMiddleware((context, next) => {
   context.locals.requestId = requestId;
 
   return runWithRequestId(requestId, async () => {
-    const path = new URL(context.request.url).pathname;
+    // Use Astro's normalized pathname, NOT one re-derived from request.url.
+    // Astro routes on a path that has been percent-decoded and had duplicate
+    // leading slashes collapsed, so deriving it from the raw URL here would let
+    // `//admin/audit` or `/%61dmin/audit` reach the admin pages while the
+    // checks below (`=== "/admin"`, `startsWith("/admin/")`) silently miss.
+    const path = context.url.pathname;
     try {
       const result = await getAuth().api.getSession({ headers: context.request.headers });
       const user = (result?.user ?? null) as App.Locals["user"];

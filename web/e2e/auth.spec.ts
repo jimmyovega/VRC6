@@ -94,6 +94,61 @@ test("E2E-14 the bootstrap admin (ADMIN_EMAIL) can reach admin", async ({ page, 
   await expect(page.getByRole("heading", { level: 1, name: "Admin" })).toBeVisible();
 });
 
+// Security regression — the middleware used to derive its path from the raw
+// `request.url`, while Astro routes on a percent-decoded, slash-collapsed path.
+// That mismatch let `/%61dmin/audit` and `//admin/audit` reach the admin pages
+// with no session at all (the audit log leaks user email addresses).
+//
+// These assert the OUTCOME (no admin surface without an admin session), not the
+// mechanism, so they hold whichever of the two layers catches it: the middleware
+// path fix or the per-page `isAdmin` guards. Verified to fail against the
+// original code, where `/%61dmin/audit` returned 200 with the audit table.
+// NB: these MUST be requested as absolute URLs. A leading `//` in a *relative*
+// URL is protocol-relative, so `request.get("//admin")` would resolve to
+// `http://admin/` and never touch the app at all.
+const ORIGIN = "http://localhost:8788";
+const ADMIN_PATH_VARIANTS = [
+  "/admin", // control — the plain path must keep working
+  "//admin", // duplicate leading slash
+  "/%61dmin", // percent-encoded 'a'
+  "/%2561dmin", // double-encoded
+  "/admin/audit", // control
+  "//admin/audit",
+  "/%61dmin/audit",
+  "/admin/review",
+  "//admin/review",
+  "/%61dmin/articles",
+];
+
+test("E2E-62 encoded and double-slash admin paths cannot bypass the auth gate (anonymous)", async ({
+  request,
+}) => {
+  for (const path of ADMIN_PATH_VARIANTS) {
+    const res = await request.get(`${ORIGIN}${path}`, { maxRedirects: 0 });
+    expect(
+      [301, 302].includes(res.status()),
+      `${path} should redirect an anonymous visitor, got ${res.status()}`,
+    ).toBeTruthy();
+    expect(res.headers()["location"], `${path} should redirect to /login`).toContain("/login");
+    // Belt and braces: the audit page's contents must never appear.
+    expect(await res.text()).not.toContain("Audit log");
+  }
+});
+
+test("E2E-63 an editor cannot reach admin pages via any path encoding", async ({
+  page,
+  request,
+}) => {
+  await signUpAndLogin(page, request, `editor-enc-${Date.now()}@vrc6.com`);
+  for (const path of ADMIN_PATH_VARIANTS) {
+    await page.goto(`${ORIGIN}${path}`);
+    // Every variant must land on the dashboard, never an admin page.
+    await expect(page, `${path} should not expose an admin page to an editor`).toHaveURL(
+      /\/dashboard$/,
+    );
+  }
+});
+
 test("E2E-15 forgot-password shows a confirmation after submit", async ({ page }) => {
   await page.goto("/forgot-password");
   await page.locator('input[name="email"]').fill("anyone@vrc6.com");

@@ -6,8 +6,15 @@ import Layout from "../../layouts/Layout.astro";
 import { getDb, schema } from "../../db";
 import { getArticleStatusCounts, getArticlesForReview, getUserStatusCounts } from "../../db/queries";
 import { getMaintenanceStatus } from "../../lib/maintenance";
+import { isAdmin } from "../../lib/permissions";
 
-// Admin-only — enforced in middleware.
+// Admin-only. Re-checked here as well as in middleware — see audit.astro. The
+// role check matters: this page lists every user's email plus live invite
+// tokens, so a bare non-null assertion would have shown it to any editor.
+if (!isAdmin(Astro.locals.user)) {
+  return Astro.locals.user ? Astro.redirect("/dashboard") : Astro.redirect("/login");
+}
+
 const me = Astro.locals.user!;
 const db = getDb(env.DB);
 const [pendingReview, maintenance, articleCounts, userCounts] = await Promise.all([
