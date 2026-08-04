@@ -21,6 +21,11 @@ export default defineConfig({
   // Individual static pages can opt back in with `export const prerender = true`.
   output: 'server',
   adapter: cloudflare(),
+  // Forces every component/page <style> external regardless of size — pairs
+  // with vite.build.assetsInlineLimit below so CSP's script-src/style-src-elem
+  // never need 'unsafe-inline'. See the doc comment on buildCsp() in
+  // lib/security-headers.ts for what this closes and why.
+  build: { inlineStylesheets: 'never' },
   vite: {
     // Baked in at build time so the running Worker reports the same release
     // Sentry's source maps were uploaded under. Doing it here rather than as a
@@ -30,7 +35,11 @@ export default defineConfig({
     // 'hidden' emits maps (Sentry uploads them via injected debug IDs) but adds
     // NO sourceMappingURL comment — otherwise wrangler errors on the .map we
     // delete after upload ("Invalid source map path ... does not exist").
-    build: { sourcemap: sentryUpload ? 'hidden' : false },
+    // assetsInlineLimit: 0 is the script-side half of the inlineStylesheets
+    // setting above — Astro has no dedicated script option, so this disables
+    // Vite's own size-based inlining (default 4KB) that would otherwise still
+    // inline small page scripts like Layout.astro's nav-toggle/logout handler.
+    build: { sourcemap: sentryUpload ? 'hidden' : false, assetsInlineLimit: 0 },
     plugins: sentryUpload
       ? [
           sentryVitePlugin({

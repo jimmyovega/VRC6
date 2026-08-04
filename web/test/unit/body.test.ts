@@ -281,6 +281,46 @@ describe("renderBodyToHtml — security", () => {
     expect(renderBodyToHtml(img("javascript:x"))).toBe("");
     expect(renderBodyToHtml(img("https://cdn.vrc6.com/a.png"))).toContain('<img src="https://cdn.vrc6.com/a.png"');
   });
+
+  // A deeply-nested body — still well inside MAX_BODY_BYTES, since
+  // `{"type":"blockquote","content":[…]}` costs only ~24 bytes per level of
+  // nesting — used to recurse until the isolate's stack overflowed, 500ing the
+  // published article on every single request (the stored body never changes).
+  function deeplyNested(depth: number) {
+    let node: unknown = { type: "paragraph", text: "bottom" };
+    for (let i = 0; i < depth; i++) node = { type: "blockquote", content: [node] };
+    return { type: "doc", content: [node] };
+  }
+
+  it("renders a deeply-nested body without throwing, well past the isolate's real stack limit", () => {
+    // 5000 levels is far beyond both realistic content and a JS stack — this
+    // would reliably RangeError before the depth cap existed.
+    expect(() => renderBodyToHtml(deeplyNested(5000))).not.toThrow();
+  });
+
+  it("bodyToText handles the same deeply-nested body independently of the renderer", () => {
+    // readingTimeMinutes calls bodyToText on the whole document root directly,
+    // so it needs its own guard rather than inheriting renderNode's.
+    expect(() => bodyToText(deeplyNested(5000))).not.toThrow();
+    expect(() => readingTimeMinutes(deeplyNested(5000))).not.toThrow();
+  });
+
+  it("still renders normally-nested content in full — the cap doesn't clip real articles", () => {
+    // A blockquote > bulletList > listItem > paragraph is 4 levels — nowhere
+    // near the cap, so the bottom text must still come through.
+    const body = {
+      type: "doc",
+      content: [deeplyNested(4).content[0]],
+    };
+    expect(renderBodyToHtml(body)).toContain("bottom");
+  });
+
+  it("degrades to dropping only what's past the cap, not the whole document", () => {
+    // A shallow paragraph alongside a wildly deep one: the shallow one must
+    // still render even though the deep one gets truncated.
+    const body = { type: "doc", content: [{ type: "paragraph", text: "shallow" }, deeplyNested(5000).content[0]] };
+    expect(renderBodyToHtml(body)).toContain("<p>shallow</p>");
+  });
 });
 
 describe("isDocJson", () => {

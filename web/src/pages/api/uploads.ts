@@ -1,6 +1,12 @@
 import type { APIRoute } from "astro";
 import { env } from "cloudflare:workers";
-import { MAX_IMAGE_BYTES, isAllowedImageType, mediaUrl, newImageKey } from "../../lib/media";
+import {
+  MAX_IMAGE_BYTES,
+  isAllowedImageType,
+  mediaUrl,
+  newImageKey,
+  sniffImageType,
+} from "../../lib/media";
 import { log } from "../../lib/log";
 
 const mediaEnv = env as typeof env & { MEDIA: R2Bucket; MEDIA_BASE_URL?: string };
@@ -27,6 +33,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const file = form.get("file");
   if (!(file instanceof File)) return json({ error: "No file provided." }, 400);
+  // Fast-path rejection on the client's own claim — saves reading the body of
+  // an obviously-wrong upload. This is NOT the security check; see below.
   if (!isAllowedImageType(file.type)) {
     return json({ error: "Unsupported image type (use JPEG, PNG, WebP, or GIF)." }, 415);
   }
@@ -34,9 +42,26 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ error: "Image is too large (max 5 MB)." }, 413);
   }
 
-  const key = newImageKey(file.type)!;
-  await mediaEnv.MEDIA.put(key, await file.arrayBuffer(), {
-    httpMetadata: { contentType: file.type },
+  const bytes = await file.arrayBuffer();
+  // The real check: identify the type from the bytes actually received, not
+  // the client-declared Content-Type on the multipart part (fully
+  // attacker-controlled — a request can declare image/png over arbitrary
+  // bytes). Everything downstream — extension, stored key, and the
+  // content-type the object is re-served with — is sourced from this sniffed
+  // value, so a mismatched declaration can never reach storage.
+  const sniffed = sniffImageType(new Uint8Array(bytes));
+  if (!sniffed || sniffed !== file.type) {
+    log.warn("upload rejected — declared type doesn't match file content", {
+      userId: actor.id,
+      declared: file.type,
+      sniffed,
+    });
+    return json({ error: "The file's content doesn't match a supported image type." }, 415);
+  }
+
+  const key = newImageKey(sniffed)!;
+  await mediaEnv.MEDIA.put(key, bytes, {
+    httpMetadata: { contentType: sniffed },
   });
   log.info("media uploaded", { userId: actor.id, key, size: file.size });
 
