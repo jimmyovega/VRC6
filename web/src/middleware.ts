@@ -41,8 +41,6 @@ export const onRequest = defineMiddleware((context, next) => {
       // re-derives it, which is not guaranteed to equal what a real browser
       // sends as Origin for an in-page form submission under wrangler dev's
       // local proxying.
-      // DIAGNOSTIC: re-enabled (CSP alone disabled below fixed CI, so this
-      // was never the cause — confirming that conclusion here).
       if (
         requiresOriginCheck(context.request.method) &&
         !originIsTrusted(
@@ -96,9 +94,6 @@ export const onRequest = defineMiddleware((context, next) => {
       // `wrangler dev`, CI, and production all serve — so unlike the
       // *_DISABLED runtime flags, there is no way to "leave this on" in a real
       // deployment.
-      // DIAGNOSTIC: re-enabled with CSP itself stubbed out inside
-      // security-headers.ts, to bisect CSP vs the other headers (HSTS is the
-      // next suspect). NOT for merge in this state.
       if (!import.meta.env.DEV) applySecurityHeaders(response.headers, env);
       return response;
     } catch (err) {

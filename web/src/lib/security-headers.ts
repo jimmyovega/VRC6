@@ -2,12 +2,14 @@
 // closes a specific gap from the security audit — none were set anywhere in
 // the app before this.
 //
-// CSP is the most load-bearing: `src/lib/body.ts` is the app's hand-written
-// XSS boundary (it escapes text and allowlists URL schemes/CSS values), and
-// CSP is the second line of defense if that renderer ever regresses. Every
-// source listed below is grounded in an actual usage in this codebase, found
-// by grepping for every external origin, every <script>, and every inline
-// style attribute the app emits — not copied from a generic template.
+// CSP's main remaining job here is origin allowlisting (network/frame/image
+// loads) and closing clickjacking/plugin-content/base-form injection — see
+// the `'unsafe-inline'` note on buildCsp() for why script/style strictness
+// isn't part of what it delivers. The actual XSS boundary is `src/lib/body.ts`
+// (escapes text, allowlists URL schemes/CSS values) — verified directly
+// against its own test suite, not assumed. Every source listed below is
+// grounded in an actual usage in this codebase, found by grepping for every
+// external origin the app references — not copied from a generic template.
 
 export interface SecurityHeadersEnv {
   MEDIA_BASE_URL?: string;
@@ -32,21 +34,26 @@ function originOf(url: string | undefined): string | null {
  * prod; unset in local dev/CI, where media serves same-origin through
  * `/media/<key>` instead — see `mediaUrl()` in lib/media.ts).
  *
- * - `script-src`: only Turnstile's widget script (`login.astro`,
- *   `forgot-password.astro`) loads from an external host. Every other
- *   `<script>` in the app is a plain (non-`is:inline`) block, which Astro/Vite
- *   extracts to a same-origin bundled file at build time — confirmed against
- *   the built output. No `'unsafe-inline'`/`'unsafe-eval'` needed.
- * - `style-src-elem` vs `style-src-attr` (Astro 7.1+ supports the split):
- *   component `<style>` blocks are always extracted to same-origin CSS files
- *   at build time — also confirmed against the built output — so
- *   `style-src-elem` stays strict. But `body.ts`, `ArticleCard.astro`, and the
- *   carousel emit inline `style="…"` attributes (text-align, aspect-ratio,
- *   object-position), all already allowlisted/numerically clamped at the
- *   point they're written. Scoping `'unsafe-inline'` to `style-src-attr` only
- *   means a `<style>` tag injection stays blocked even if that allowlisting
- *   ever failed — the blanket `style-src 'unsafe-inline'` most CSPs settle
- *   for would not have that property.
+ * - `script-src` / `style-src-elem` carry `'unsafe-inline'`. This was NOT the
+ *   original design — Astro was verified to bundle every `<script>` and
+ *   `<style>` block to a same-origin file, and that verification was correct
+ *   for the CSS build output as a whole. What it missed: Astro inlines
+ *   *some* of that same bundled output directly into the page's HTML when a
+ *   script/style is small and page-specific — confirmed by a live CSP
+ *   violation naming the exact culprits: Layout.astro's nav-toggle/logout
+ *   script (every page) and Breadcrumb.astro's scoped styles (some pages).
+ *   This is a build-time optimization, not something addressable by moving
+ *   one file — any small component's styles can trigger it. Astro 6+ has a
+ *   native hash-based `security.csp` feature built for exactly this, but it
+ *   ships as a `<meta>` tag rather than a header, which can't carry
+ *   `frame-ancestors` — losing the clickjacking protection below to gain
+ *   script hashing wasn't the right trade. `'unsafe-inline'` here is a
+ *   deliberate, narrower compromise: the app's actual XSS boundary is
+ *   `body.ts`'s escaping/URL-scheme allowlisting (verified directly — see its
+ *   test suite), not script-src strictness, so this CSP's real remaining
+ *   value is everything below: origin allowlisting for network/frame/image
+ *   loads, and closing clickjacking, plugin content, and base/form-target
+ *   injection.
  * - `frame-ancestors 'none'`: closes the clickjacking finding — the site was
  *   fully framable, including `/dashboard`, `/admin`, and
  *   `/dashboard/security` (2FA disable).
@@ -56,8 +63,8 @@ export function buildCsp(env: SecurityHeadersEnv): string {
   const imgSrc = ["'self'", mediaOrigin].filter((v): v is string => v !== null).join(" ");
   return [
     "default-src 'self'",
-    `script-src 'self' ${CLOUDFLARE_CHALLENGES}`,
-    `style-src-elem 'self' ${GOOGLE_FONTS_CSS}`,
+    `script-src 'self' 'unsafe-inline' ${CLOUDFLARE_CHALLENGES}`,
+    `style-src-elem 'self' 'unsafe-inline' ${GOOGLE_FONTS_CSS}`,
     "style-src-attr 'unsafe-inline'",
     `font-src 'self' ${GOOGLE_FONTS_STATIC}`,
     `img-src ${imgSrc}`,
