@@ -41,7 +41,11 @@ export const onRequest = defineMiddleware((context, next) => {
       // re-derives it, which is not guaranteed to equal what a real browser
       // sends as Origin for an in-page form submission under wrangler dev's
       // local proxying.
+      // DIAGNOSTIC: temporarily disabled to isolate whether this check or
+      // something else (CSP is the other prime suspect) is behind the CI
+      // anomaly. NOT for merge in this state.
       if (
+        false &&
         requiresOriginCheck(context.request.method) &&
         !originIsTrusted(
           context.request.headers.get("origin"),
