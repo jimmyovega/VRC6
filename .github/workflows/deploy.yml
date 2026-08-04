@@ -54,6 +54,19 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: vrc6
           SENTRY_PROJECT: node-cloudflare-workers
+          # Names the Sentry release and is baked into the bundle so the running
+          # Worker reports the same value. See astro.config.mjs.
+          GITHUB_SHA: ${{ github.sha }}
+
+      # Label the Cloudflare version with the commit and subject line.
+      # Without this, `wrangler deployments list` shows bare version UUIDs with
+      # "Message: -", so there's no way to tell from the Cloudflare side which
+      # deploy is running — which matters most when deciding whether to roll back.
+      - name: Compose deploy annotation
+        id: ann
+        run: |
+          SUBJECT="$(git log -1 --pretty=%s | cut -c1-100)"
+          echo "message=${GITHUB_SHA:0:7} ${SUBJECT}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy
         uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
@@ -61,10 +74,52 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: web
-          command: deploy
+          command: deploy --tag ${{ github.sha }} --message "${{ steps.ann.outputs.message }}"
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
+      # Hits the real custom domain and re-checks the security invariants from
+      # the audit (admin routes closed to anonymous visitors however encoded,
+      # public sign-up shut, config guard satisfied). Read-only.
       - name: Run prod smoke tests
         run: npm run test:prod-smoke
+
+  # A failed deploy is otherwise invisible unless someone thinks to open the
+  # Actions tab — three consecutive failures once went unnoticed for 40 minutes,
+  # leaving a security fix unshipped while everyone assumed it was live. Files a
+  # single, reused issue so the signal persists and notifies watchers.
+  notify-failure:
+    needs: deploy
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open or update the deploy-failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          BODY="Deploy failed for \`${SHA:0:7}\`.
+
+          Run: ${RUN_URL}
+
+          Production is still serving the previous version — whatever was in that
+          commit is **not live**. Check the failing step before assuming it shipped."
+
+          # Reuse one open issue so a run of consecutive failures doesn't spam.
+          EXISTING="$(gh issue list --repo "$REPO" --state open \
+            --search 'in:title "Deploy failed"' --json number --jq '.[0].number // empty')"
+
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$REPO" --body "$BODY"
+          else
+            gh issue create --repo "$REPO" \
+              --title "Deploy failed — production is not up to date" \
+              --body "$BODY"
+          fi

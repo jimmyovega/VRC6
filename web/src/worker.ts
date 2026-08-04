@@ -36,14 +36,37 @@ const handler = {
   },
 };
 
+// Replaced at build time by vite `define` (see astro.config.mjs) with the
+// commit this bundle was built from. Empty for local builds.
+declare const __VRC6_RELEASE__: string;
+
 export default Sentry.withSentry(
   (env: { SENTRY_DSN?: string; SENTRY_ENVIRONMENT?: string }) => ({
     // No DSN → the SDK is inert, so local dev / CI / tests are unaffected.
     dsn: env.SENTRY_DSN,
     environment: env.SENTRY_ENVIRONMENT ?? "production",
+    // Ties each error to the deploy that produced it, and matches the release
+    // the source maps were uploaded under so stack traces actually resolve.
+    release: __VRC6_RELEASE__ || undefined,
     // Errors only for now — no performance tracing.
     tracesSampleRate: 0,
     sendDefaultPii: false,
+    beforeSend(event) {
+      // /reset-password?token=… carries a live, single-use account-takeover
+      // token. sendDefaultPii:false strips cookies and IP but not the URL, and
+      // any unhandled error on that page would ship the token to Sentry.
+      const url = event.request?.url;
+      if (url && url.includes("token=")) {
+        try {
+          const u = new URL(url);
+          u.searchParams.set("token", "[redacted]");
+          event.request!.url = u.toString();
+        } catch {
+          delete event.request!.url;
+        }
+      }
+      return event;
+    },
   }),
   handler,
 );
