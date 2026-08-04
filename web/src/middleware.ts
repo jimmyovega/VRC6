@@ -6,7 +6,9 @@ import { getAuth } from "./lib/auth";
 import { getMaintenanceStatus } from "./lib/maintenance";
 import { log, runWithRequestId } from "./lib/log";
 import { applySecurityHeaders } from "./lib/security-headers";
-import { originIsTrusted, requiresOriginCheck } from "./lib/origin-check";
+import { originIsTrusted, requiresOriginCheck, siteOrigin } from "./lib/origin-check";
+
+const originEnv = env as typeof env & { BETTER_AUTH_URL?: string };
 
 // Paths anonymous visitors can still reach while maintenance mode is on — the
 // full sign-in flow (so staff can log in) plus the maintenance page itself.
@@ -33,10 +35,18 @@ export const onRequest = defineMiddleware((context, next) => {
       // better-auth already runs its own equivalent check there, and letting
       // this one cover it too means there's a single, simple rule to reason
       // about rather than a carve-out that has to stay correct forever. See
-      // lib/origin-check.ts for why an ABSENT Origin is allowed through.
+      // lib/origin-check.ts for why an ABSENT Origin is allowed through, and
+      // why the trusted origin comes from BETTER_AUTH_URL rather than
+      // context.url.origin — the latter is the request as this runtime
+      // re-derives it, which is not guaranteed to equal what a real browser
+      // sends as Origin for an in-page form submission under wrangler dev's
+      // local proxying.
       if (
         requiresOriginCheck(context.request.method) &&
-        !originIsTrusted(context.request.headers.get("origin"), context.url.origin)
+        !originIsTrusted(
+          context.request.headers.get("origin"),
+          siteOrigin(originEnv.BETTER_AUTH_URL, context.url.origin),
+        )
       ) {
         const rejected = new Response("Forbidden — origin mismatch.", { status: 403 });
         rejected.headers.set("x-trace-id", requestId);

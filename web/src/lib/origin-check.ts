@@ -31,3 +31,26 @@ export function originIsTrusted(origin: string | null, siteOrigin: string): bool
   if (!origin) return true;
   return origin === siteOrigin;
 }
+
+/**
+ * The origin to trust requests against. Deliberately NOT `context.url.origin`
+ * (the incoming request's own URL, as re-derived by the runtime) — under
+ * `wrangler dev`'s local proxying, the server's own view of a request's origin
+ * can diverge from what a real browser actually sends as `Origin` for an
+ * in-page form submission, even though both legitimately mean "this site".
+ * `BETTER_AUTH_URL` is the one already-configured, stable value the app uses
+ * for exactly this purpose (better-auth's own origin check is keyed off it —
+ * see lib/auth.ts), so deriving from the same source keeps both checks
+ * consistent instead of trusting two different ideas of "our origin".
+ *
+ * Falls back to `fallback` (the request's own origin) only if `BETTER_AUTH_URL`
+ * is somehow unset — every real environment (dev, CI, prod) sets it.
+ */
+export function siteOrigin(betterAuthUrl: string | undefined, fallback: string): string {
+  if (!betterAuthUrl) return fallback;
+  try {
+    return new URL(betterAuthUrl).origin;
+  } catch {
+    return fallback;
+  }
+}
