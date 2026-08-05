@@ -19,6 +19,35 @@ product docs live in the `VRC6 Docs` Notion database and the repo root [`README.
 To verify a scheduled (cron) run locally: `npx wrangler dev --test-scheduled` then
 `curl http://localhost:8788/cdn-cgi/handler/scheduled`.
 
+## Testing a branch or PR locally
+
+`wrangler dev` serves the built Worker from `./dist/`, not your source files directly — it does
+**not** hot-reload. Rebuild after every change (yours or a checked-out branch's) before refreshing.
+
+```bash
+gh pr checkout 53        # or: git checkout <branch>
+npm run build
+npx wrangler dev --port 8788
+```
+
+Then open `http://localhost:8788`. This is the real Worker against local D1/R2/KV — the same
+security headers and bundling as production, unlike `npm run dev` (plain `astro dev`), which
+hot-reloads but skips both.
+
+Local D1 starts from `seed.sql`, so seeded articles/users are already there. For a throwaway
+login, hit the sign-up API directly from the browser console rather than building an account
+through the UI (works only locally — `.dev.vars` sets `ALLOW_PUBLIC_SIGNUP=1`; production doesn't):
+
+```js
+fetch('/api/auth/sign-up/email', {
+  method: 'POST', headers: {'Content-Type':'application/json'},
+  body: JSON.stringify({ email: 'you@test.com', password: 'Sup3rSecret!23', name: 'you' })
+}).then(r => r.json())
+```
+
+To compare against `main`, rebuild and restart `wrangler dev` on each branch in turn (or use
+`git worktree` to run both side by side on different ports).
+
 ## Configuration
 
 Local secrets/vars go in `web/.dev.vars` (gitignored). Copy [`.dev.vars.example`](.dev.vars.example)
