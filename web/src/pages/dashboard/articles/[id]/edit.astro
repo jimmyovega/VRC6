@@ -1169,6 +1169,12 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
     border-color: var(--phosphor);
   }
 
+  /* Pinned while writing: on a long article the tools would otherwise scroll
+     out of reach. `top: 0` needs no offset because .site-header is static (it
+     scrolls away). Sticky is bounded by the parent box, and the toolbar's
+     siblings are the editor surface + submit row — so it pins for exactly as
+     long as the editor is on screen, then releases. The opaque background is
+     load-bearing here: prose now scrolls underneath it. */
   .toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -1177,7 +1183,12 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
     padding: 0.5rem;
     background: var(--forest);
     border: 2px solid var(--lime);
-    border-bottom: none;
+    /* Above editor content and the z-index:2 carousel/image-list arrows, well
+       below the carousel lightbox (z-index:1000, styled in Layout.astro) so the
+       lightbox still covers the toolbar. */
+    position: sticky;
+    top: 0;
+    z-index: 5;
   }
   .toolbar button {
     font-family: "Press Start 2P", monospace;
@@ -1197,6 +1208,20 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
     align-self: stretch;
     background: var(--lime);
     margin: 0 0.2rem;
+  }
+  /* On a phone these ~17 buttons wrap to three or four rows; pinned, that would
+     eat most of the writing area and make the sticky toolbar a net loss. One
+     swipeable row instead. `overflow-x` here is safe — it's an ANCESTOR's
+     overflow that breaks position:sticky, not the sticky element's own.
+     640px matches the breakpoint Layout.astro already uses for the nav. */
+  @media (max-width: 640px) {
+    .toolbar {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+    }
+    .toolbar button {
+      flex: none;
+    }
   }
 
   .editor-surface {
