@@ -67,11 +67,40 @@ jobs:
       - name: Set up local D1 (build + migrate + seed)
         run: npm run e2e:setup
 
+      # wrangler dev occasionally dies at cold-start under CI's concurrent
+      # Playwright workers (bare "✘ [ERROR]" with no message, then every test
+      # fails with ECONNREFUSED) — a known workerd/Miniflare stability issue
+      # on GitHub-hosted runners (cloudflare/workerd#1075, #4391), unrelated
+      # to app code: a rerun of the identical commit passes clean. Each retry
+      # gets a genuinely fresh server, since Playwright's own
+      # `reuseExistingServer: !CI` spins one up per invocation.
+      #
+      # Unlike a `gh run rerun` (a whole new VM), a retry here reuses this
+      # job's local D1 file — a partially-completed failed attempt could
+      # leave stale data for the next one, so re-seed between attempts.
       - name: Run E2E tests
-        run: npm run test:e2e
+        run: |
+          for attempt in 1 2 3; do
+            npm run test:e2e && exit 0
+            echo "::warning::E2E attempt $attempt failed (likely the wrangler dev cold-start crash) — retrying"
+            rm -rf .wrangler/state/v3/d1
+            npm run db:migrate:local
+            npm run db:seed:local
+          done
+          echo "::error::E2E tests failed after 3 attempts"
+          exit 1
 
       - name: Run serial E2E tests (global site-wide state, e.g. maintenance mode)
-        run: npm run test:e2e:serial
+        run: |
+          for attempt in 1 2 3; do
+            npm run test:e2e:serial && exit 0
+            echo "::warning::Serial E2E attempt $attempt failed (likely the wrangler dev cold-start crash) — retrying"
+            rm -rf .wrangler/state/v3/d1
+            npm run db:migrate:local
+            npm run db:seed:local
+          done
+          echo "::error::Serial E2E tests failed after 3 attempts"
+          exit 1
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
