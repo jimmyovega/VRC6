@@ -5,6 +5,7 @@ import { getDb, schema } from "../../../../db";
 import { getArticleById } from "../../../../db/queries";
 import { canDeleteArticle } from "../../../../lib/permissions";
 import { logAudit } from "../../../../lib/audit";
+import { siteOrigin } from "../../../../lib/origin-check";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -36,6 +37,27 @@ export const POST: APIRoute = async ({ params, locals, request }) => {
   await logAudit(db, { actorId: actor.id, action: "article.delete", targetArticleId: id });
 
   const isJson = (request.headers.get("content-type") ?? "").includes("application/json");
-  if (!isJson) return new Response(null, { status: 303, headers: { Location: "/dashboard" } });
+  if (!isJson) {
+    // Return to wherever the delete was triggered from (the admin console's
+    // article list, the dashboard's own list) rather than always bouncing to
+    // /dashboard — except when that's the just-deleted article's own edit
+    // page, which no longer exists as a place to land on.
+    const authEnv = env as typeof env & { BETTER_AUTH_URL?: string };
+    const trusted = siteOrigin(authEnv.BETTER_AUTH_URL, new URL(request.url).origin);
+    const ownEditPath = `/dashboard/articles/${id}/edit`;
+    let redirectTo = "/dashboard";
+    const referer = request.headers.get("referer");
+    if (referer) {
+      try {
+        const refUrl = new URL(referer);
+        if (refUrl.origin === trusted && refUrl.pathname !== ownEditPath) {
+          redirectTo = refUrl.pathname + refUrl.search;
+        }
+      } catch {
+        // Malformed Referer header — keep the /dashboard default.
+      }
+    }
+    return new Response(null, { status: 303, headers: { Location: redirectTo } });
+  }
   return json({ ok: true });
 };
