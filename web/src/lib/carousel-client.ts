@@ -4,7 +4,7 @@
 // read-only preview. No dependencies; safe to call more than once (each carousel
 // is marked initialised).
 
-interface LightboxState {
+export interface LightboxState {
   srcs: string[];
   alts: string[];
   index: number;
@@ -74,7 +74,7 @@ function onKey(e: KeyboardEvent) {
   else if (e.key === "ArrowRight") stepLightbox(1);
 }
 
-function openLightbox(state: LightboxState, opener: HTMLElement) {
+export function openLightbox(state: LightboxState, opener: HTMLElement) {
   const el = ensureLightbox();
   lbState = state;
   lastFocus = opener;
