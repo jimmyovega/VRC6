@@ -79,7 +79,13 @@ const bskyUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(`${ar
       {
         coverUrl && (
           <div class="cover">
-            <img class="cover-img" src={coverUrl} alt="" style={`object-position:${coverFocus}`} />
+            <img
+              class="cover-img"
+              id="cover-img"
+              src={coverUrl}
+              alt={article.title}
+              style={`object-position:${coverFocus}`}
+            />
           </div>
         )
       }
@@ -143,9 +149,16 @@ const bskyUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(`${ar
 </Layout>
 
 <script>
-  import { initCarousels } from "../../lib/carousel-client";
+  import { initCarousels, openLightbox } from "../../lib/carousel-client";
   // Wire up any carousels in the article body (paging + gallery lightbox).
   initCarousels(document);
+
+  // Cover image opens the same shared lightbox as carousel slides — a single
+  // "image" (srcs.length === 1 hides the prev/next arrows automatically).
+  const coverImg = document.querySelector<HTMLImageElement>("#cover-img");
+  coverImg?.addEventListener("click", () => {
+    openLightbox({ srcs: [coverImg.src], alts: [coverImg.alt], index: 0 }, coverImg);
+  });
 
   const fill = document.querySelector<HTMLElement>(".bar-fill");
   const article = document.querySelector<HTMLElement>(".prose");
@@ -350,9 +363,11 @@ const bskyUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(`${ar
     display: block;
     width: 100%;
     aspect-ratio: 4 / 3;
-    object-fit: cover;
+    object-fit: contain;
+    background: var(--ink);
     border: 2px solid var(--lime);
     box-shadow: 4px 4px 0 var(--phosphor);
+    cursor: zoom-in;
   }
 
   .panel {
