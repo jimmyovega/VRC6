@@ -1599,6 +1599,21 @@ const coverFocusPos = focusPosition(article.featuredImageFocus);
     padding-left: 1rem;
     color: var(--lime);
   }
+  /* Explicit link colors — without these, a visited link falls back to the
+     browser default purple, which is close to unreadable against the dark
+     green background. */
+  .readonly .body :global(a) {
+    color: var(--lime);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .readonly .body :global(a:visited) {
+    color: var(--lime);
+  }
+  .readonly .body :global(a:hover),
+  .readonly .body :global(a:focus-visible) {
+    color: var(--phosphor);
+  }
   .readonly .body :global(img) {
     display: block;
     max-width: 100%;

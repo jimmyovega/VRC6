@@ -216,6 +216,21 @@ const bskyUrl = `https://bsky.app/intent/compose?text=${encodeURIComponent(`${ar
      it via :global() since Astro doesn't scope injected markup. Images must
      be capped to the prose column (they carry their natural pixel size) and
      get the same green border as the editor's ProseMirror surface. */
+  /* Explicit link colors — without these, a visited link falls back to the
+     browser default purple, which is close to unreadable against the dark
+     green background. */
+  .body :global(a) {
+    color: var(--lime);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .body :global(a:visited) {
+    color: var(--lime);
+  }
+  .body :global(a:hover),
+  .body :global(a:focus-visible) {
+    color: var(--phosphor);
+  }
   .body :global(img) {
     display: block;
     max-width: 100%;
