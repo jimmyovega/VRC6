@@ -298,10 +298,23 @@ const user = Astro.locals.user;
   /* ---- Page helpers (detail / category / stubs) ---- */
   .back {
     display: inline-block;
+    font-family: "Press Start 2P", monospace;
+    letter-spacing: 0.5px;
     font-size: 0.5rem;
     color: var(--lime);
     text-decoration: none;
     margin-bottom: 1rem;
+  }
+  /* Status/role badge base — pages layer color modifiers on top
+     (.st-published, .role-admin, .link-dead, etc.) locally. */
+  .tagpill {
+    font-family: "Press Start 2P", monospace;
+    letter-spacing: 0.5px;
+    font-size: 0.4rem;
+    padding: 0.3rem 0.45rem;
+    background: var(--deep-moss);
+    color: var(--phosphor);
+    border: 1px solid var(--lime);
   }
   .page-title {
     font-size: 1.4rem;
