@@ -47,6 +47,8 @@ enum category_type {
   opinions
   games
   photography
+  music
+  announcements
 }
 
 Table categories {

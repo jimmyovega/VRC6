@@ -14,7 +14,7 @@ DELETE FROM user WHERE id = 'seed-admin';
 INSERT INTO user (id, name, email, email_verified, role, status, created_at, updated_at)
 VALUES ('seed-admin', 'VRC6 Editorial', 'admin@vrc6.com', 1, 'admin', 'active', unixepoch(), unixepoch());
 
--- Categories (9 from the data model; browse slug + display label).
+-- Categories (browse slug + display label).
 INSERT INTO categories (type, slug, label) VALUES
   ('art',        'art',        'Art'),
   ('locales',    'locales',    'Locales'),
@@ -24,7 +24,8 @@ INSERT INTO categories (type, slug, label) VALUES
   ('opinions',   'opinions',   'Opinions'),
   ('games',      'games',      'Games'),
   ('photography','photography','Photography'),
-  ('music',      'music',      'Music');
+  ('music',      'music',      'Music'),
+  ('announcements','announcements','Announcements');
 
 -- Published articles, staggered over the last ~2 weeks (newest = home "featured").
 INSERT INTO articles (title, excerpt, body, author_id, category_id, status, slug, published_at)
