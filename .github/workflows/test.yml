@@ -98,10 +98,15 @@ jobs:
           echo "::error::Serial E2E tests failed after 3 attempts"
           exit 1
 
-      - name: Upload Playwright report
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: web/playwright-report/
-          retention-days: 7
+      # NOTE: there is deliberately no artifact upload here. playwright.config.ts
+      # uses the `list` reporter, so `playwright-report/` is never written — the
+      # upload step this replaces silently uploaded nothing on every run ("No
+      # files were found with the provided path"). Actions *storage* (artifacts
+      # + caches, shared with Packages) is a hard-capped, billed quota that is
+      # NOT waived for public repos the way Actions minutes are, and it accrues
+      # by GB-hour, so a report uploaded on every green run is pure cost.
+      #
+      # If failure diagnostics are wanted later, add it back deliberately and
+      # bounded: switch the reporter to `html`, gate the step on `if: failure()`
+      # so green runs upload nothing, and set a short `retention-days` (1–3) —
+      # the repo-level default is 90 days.
