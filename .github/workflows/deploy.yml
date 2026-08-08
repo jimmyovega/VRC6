@@ -30,6 +30,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `cache: npm` on purpose — Actions storage (caches + artifacts) is a
+      # hard-capped billed quota that bills by GB-hour, unlike the free minutes
+      # this public repo gets. See the storage budget note in test.yml.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
