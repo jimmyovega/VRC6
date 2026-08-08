@@ -2,6 +2,22 @@ name: Test
 
 # Runs unit + integration (vitest) and E2E (Playwright) on every PR.
 # Both run D1 locally via Miniflare — no Cloudflare credentials required.
+#
+# STORAGE BUDGET — please read before adding `cache:`, `upload-artifact`, or a
+# job matrix. Actions *minutes* are free and effectively unlimited on a public
+# repo, but Actions *storage* (caches + artifacts, shared with Packages) is a
+# hard-capped billed quota that is NOT similarly waived — 0.5 GB/month here.
+# It bills by GB-HOUR, so cost = size x how long it's kept, and deleting later
+# does not refund what already accrued. A single ~171 MB npm cache left for a
+# month is ~1/3 of the entire monthly allowance; that is exactly what put this
+# account at 100% (see the git history for .github/workflows).
+#
+# Adding TESTS is free — more tests only burn minutes. Adding STORED OUTPUT is
+# not. If you need artifacts, bound them: `if: failure()` so green runs upload
+# nothing, plus a short `retention-days` (repo default is 90).
+
+# No dependency caching (`cache: npm`) anywhere in this file, on purpose — see
+# the storage budget note above. `npm ci` is fast enough on free minutes.
 on:
   pull_request:
   workflow_dispatch:
