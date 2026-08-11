@@ -394,6 +394,61 @@ test("E2E-23 the security page exposes 2FA enrolment", async ({ page, request })
   await expect(page.getByRole("button", { name: "ENABLE 2FA" })).toBeVisible();
 });
 
+test("E2E-64 a user can change their password from Security & 2FA, and other sessions are revoked", async ({
+  page,
+  request,
+  browser,
+}) => {
+  const email = `pwchange-${Date.now()}@vrc6.com`;
+  const oldPassword = "Sup3rSecret!23";
+  const newPassword = "BrandNewPass456";
+
+  await signUpAndLogin(page, request, email);
+
+  // A second device/session for the same account, in its own cookie jar.
+  const otherContext = await browser.newContext();
+  await otherContext.request.post("/api/auth/sign-in/email", {
+    data: { email, password: oldPassword },
+  });
+  expect((await otherContext.request.get("/dashboard")).url()).toContain("/dashboard");
+
+  await page.goto("/dashboard/security");
+  await page.locator("#current-password").fill(oldPassword);
+  await page.locator("#new-password").fill(newPassword);
+  await page.locator("#confirm-new-password").fill(newPassword);
+  await page.getByRole("button", { name: "CHANGE PASSWORD" }).click();
+  await expect(
+    page.getByText("Password changed. You've been signed out of other devices."),
+  ).toBeVisible();
+
+  // This tab's own session survives — better-auth reissues its cookie in the
+  // same response, so it's excluded from the revocation.
+  await page.goto("/dashboard");
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  // The other device's session is dead — it gets bounced to /login.
+  expect((await otherContext.request.get("/dashboard")).url()).toContain("/login");
+
+  // The credential actually changed, not just the UI state. A fresh,
+  // cookie-less context for this — `request` shares page's own (now
+  // freshly-reissued and valid) session cookie, and better-auth applies a
+  // stricter Origin check to sign-in attempts that carry an existing
+  // session, which a plain APIRequestContext.post() doesn't set. That's
+  // real behavior worth knowing, just not what this assertion is about.
+  const verifyContext = await browser.newContext();
+  const oldStillWorks = await verifyContext.request.post("/api/auth/sign-in/email", {
+    data: { email, password: oldPassword },
+  });
+  expect(oldStillWorks.status()).toBe(401);
+  const newWorks = await verifyContext.request.post("/api/auth/sign-in/email", {
+    data: { email, password: newPassword },
+  });
+  expect(newWorks.ok()).toBeTruthy();
+
+  await otherContext.close();
+  await verifyContext.close();
+});
+
 test("E2E-24 responses carry a request-scoped x-trace-id header", async ({ request }) => {
   const res = await request.get("/");
   expect(res.ok()).toBeTruthy();
