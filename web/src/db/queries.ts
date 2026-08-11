@@ -196,6 +196,21 @@ export function getCategoryOptions(db: DB) {
     .orderBy(schema.categories.label);
 }
 
+/**
+ * A user's own recent access history (IP + user agent + when), newest first —
+ * for the Security page. Sourced from the durable `audits` trail rather than
+ * the live `session` table, whose rows disappear on sign-out/revoke/expiry
+ * and so can't answer "when did I last log in from X" once that session ends.
+ */
+export function getRecentLogins(db: DB, userId: string, limit = 10) {
+  return db
+    .select({ details: schema.audits.details, createdAt: schema.audits.createdAt })
+    .from(schema.audits)
+    .where(and(eq(schema.audits.action, "user.login"), eq(schema.audits.targetUserId, userId)))
+    .orderBy(desc(schema.audits.createdAt))
+    .limit(limit);
+}
+
 /** A single article by id (all fields) — for the editor / permission checks. */
 export async function getArticleById(db: DB, id: number) {
   const [row] = await db

@@ -59,6 +59,15 @@ export function getAuth() {
     appName: "VRC6",
     secret: authEnv.BETTER_AUTH_SECRET,
     baseURL: authEnv.BETTER_AUTH_URL,
+    // better-auth's IP capture (session.ipAddress, used on the Security page's
+    // recent-access list) defaults to reading only `x-forwarded-for`, which
+    // Cloudflare doesn't reliably set — it sets `cf-connecting-ip` instead
+    // (the same header the rate limiter's own IP extraction below already
+    // reads for the real client IP). Without this, every session row's IP is
+    // silently blank.
+    advanced: {
+      ipAddress: { ipAddressHeaders: ["cf-connecting-ip", "x-forwarded-for"] },
+    },
     plugins: [twoFactor({ issuer: "VRC6" })],
     hooks: {
       // Gate the public auth forms with Cloudflare Turnstile. The token is
@@ -193,6 +202,21 @@ export function getAuth() {
               });
             }
             return { data: newSession };
+          },
+          // A durable "who accessed this account and when" trail for the
+          // Security page (distinct from the `session` table itself, whose
+          // rows disappear on sign-out/revoke/expiry — this survives that).
+          // Fires on sign-in and sign-up alike (a sign-up IS the first
+          // access); `created` is the already-persisted row, so ipAddress/
+          // userAgent are whatever better-auth actually resolved.
+          after: async (created) => {
+            const db = getDb(env.DB);
+            await logAudit(db, {
+              actorId: created.userId,
+              action: "user.login",
+              targetUserId: created.userId,
+              details: { ip: created.ipAddress ?? null, userAgent: created.userAgent ?? null },
+            });
           },
         },
       },

@@ -1,7 +1,7 @@
 ---
 import { env } from "cloudflare:workers";
 import { alias } from "drizzle-orm/sqlite-core";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, ne } from "drizzle-orm";
 import Layout from "../../layouts/Layout.astro";
 import { getDb, schema } from "../../db";
 import { isAdmin } from "../../lib/permissions";
@@ -27,6 +27,11 @@ const rows = await db
   .from(schema.audits)
   .leftJoin(actor, eq(schema.audits.actorId, actor.id))
   .leftJoin(target, eq(schema.audits.targetUserId, target.id))
+  // Every login is audited too (for the per-user Security page), but at
+  // login volume it would drown out the moderation actions this page is
+  // actually for — that history is surfaced to each user on their own
+  // Security page instead, not here.
+  .where(ne(schema.audits.action, "user.login"))
   .orderBy(desc(schema.audits.createdAt))
   .limit(100);
 

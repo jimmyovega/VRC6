@@ -3,6 +3,8 @@ import { env } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import Layout from "../../layouts/Layout.astro";
 import { getDb, schema } from "../../db";
+import { getRecentLogins } from "../../db/queries";
+import { summarizeUserAgent } from "../../lib/user-agent";
 
 // Auth enforced in middleware.
 const me = Astro.locals.user!;
@@ -13,6 +15,10 @@ const [row] = await db
   .where(eq(schema.user.id, me.id))
   .limit(1);
 const enabled = row?.enabled ?? false;
+
+const recentLogins = await getRecentLogins(db, me.id, 10);
+const fmtWhen = (d: Date | null) =>
+  d ? new Date(d).toISOString().replace("T", " ").slice(0, 19) + "Z" : "";
 ---
 
 <Layout center topShare={1} bottomShare={3} title="Security — VRC6">
@@ -88,6 +94,28 @@ const enabled = row?.enabled ?? false;
         </div>
       )
     }
+
+    <h2 class="section pixel">RECENT ACCESS</h2>
+    <div class="card panel">
+      {
+        recentLogins.length === 0 ? (
+          <p class="hint pixel">No recorded access yet.</p>
+        ) : (
+          <ul class="access-list">
+            {recentLogins.map((entry) => {
+              const details = (entry.details ?? {}) as { ip?: string | null; userAgent?: string | null };
+              return (
+                <li class="access-row">
+                  <span class="access-when pixel">{fmtWhen(entry.createdAt)}</span>
+                  <span class="access-device">{summarizeUserAgent(details.userAgent)}</span>
+                  <span class="access-ip">{details.ip || "Unknown IP"}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )
+      }
+    </div>
 
     <p><a class="btn pixel back-link" href="/dashboard">BACK TO DASHBOARD</a></p>
   </div>
@@ -276,6 +304,42 @@ const enabled = row?.enabled ?? false;
   .btn.danger {
     color: #fca5a5;
     border-color: #fca5a5;
+  }
+  .access-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .access-row {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: baseline;
+    gap: 0.4rem 0.75rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid rgba(74, 222, 128, 0.3);
+  }
+  .access-row:first-child {
+    padding-top: 0;
+    border-top: none;
+  }
+  .access-when {
+    font-size: 0.45rem;
+    color: var(--lime);
+    white-space: nowrap;
+  }
+  .access-device {
+    color: var(--phosphor);
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  .access-ip {
+    color: var(--phosphor);
+    font-size: 0.85rem;
+    text-align: right;
+    overflow-wrap: anywhere;
   }
   .back-link {
     display: inline-block;

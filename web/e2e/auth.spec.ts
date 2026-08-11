@@ -429,12 +429,14 @@ test("E2E-64 a user can change their password from Security & 2FA, and other ses
   // The other device's session is dead — it gets bounced to /login.
   expect((await otherContext.request.get("/dashboard")).url()).toContain("/login");
 
-  // The credential actually changed, not just the UI state. A fresh,
-  // cookie-less context for this — `request` shares page's own (now
-  // freshly-reissued and valid) session cookie, and better-auth applies a
-  // stricter Origin check to sign-in attempts that carry an existing
-  // session, which a plain APIRequestContext.post() doesn't set. That's
-  // real behavior worth knowing, just not what this assertion is about.
+  // The credential actually changed, not just the UI state. A fresh context
+  // for this, not the `request` fixture used by signUpAndLogin above:
+  // `request` is one reusable APIRequestContext for the whole test, so it
+  // still carries the cookie from that earlier sign-up call — and
+  // better-auth's origin-check requires an Origin header on ANY request that
+  // carries a Cookie header at all (see origin-check.mjs's `useCookies`
+  // check), which a plain `.post()` doesn't set. Real behavior worth
+  // knowing, just not what this assertion is about.
   const verifyContext = await browser.newContext();
   const oldStillWorks = await verifyContext.request.post("/api/auth/sign-in/email", {
     data: { email, password: oldPassword },
@@ -447,6 +449,41 @@ test("E2E-64 a user can change their password from Security & 2FA, and other ses
 
   await otherContext.close();
   await verifyContext.close();
+});
+
+test("E2E-65 the security page shows recent access history, excluded from the admin audit log", async ({
+  page,
+  request,
+  browser,
+}) => {
+  const email = `access-${Date.now()}@vrc6.com`;
+  await signUpAndLogin(page, request, email);
+
+  await page.goto("/dashboard/security");
+  const rows = page.locator(".access-row");
+  await expect(rows.first()).toBeVisible();
+  const count = await rows.count();
+  expect(count).toBeGreaterThanOrEqual(1);
+  expect(count).toBeLessThanOrEqual(10);
+  // A real browser UA gets summarized ("Chrome on Windows"), not dumped raw.
+  await expect(rows.first().locator(".access-device")).toContainText("Chrome");
+  await expect(rows.first().locator(".access-when")).not.toHaveText("");
+
+  // Login events are excluded from the general admin audit view — that page
+  // stays focused on moderation actions, not access noise (see the `ne`
+  // filter in admin/audit.astro). A fresh browser context for the admin
+  // check, not `page`/`request` above: `request` is one reusable
+  // APIRequestContext for the whole test, so by this point it's already
+  // carrying the cookie from the first signUpAndLogin's sign-up call, and
+  // better-auth's origin-check requires an Origin header on any request
+  // that carries a Cookie header at all — which a plain `.post()` doesn't
+  // set (see the identical note on E2E-64).
+  const adminContext = await browser.newContext();
+  const adminPage = await adminContext.newPage();
+  await signUpAndLogin(adminPage, adminContext.request, "owner@vrc6.com");
+  await adminPage.goto("/admin/audit");
+  await expect(adminPage.getByText("user.login")).toHaveCount(0);
+  await adminContext.close();
 });
 
 test("E2E-24 responses carry a request-scoped x-trace-id header", async ({ request }) => {
