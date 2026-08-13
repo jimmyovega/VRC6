@@ -302,6 +302,11 @@ const fmtWhen = (d: Date | null) =>
     color: #fca5a5;
   }
   .btn.danger {
+    /* .btn's base background is bright --lime, which turns this pale red
+       text (matches .result.err's danger color) nearly unreadable — swap to
+       the app's dark background so the red reads clearly, same as it does
+       on dark panels elsewhere (e.g. .result.err). */
+    background-color: var(--deep-moss);
     color: #fca5a5;
     border-color: #fca5a5;
   }
