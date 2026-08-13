@@ -343,6 +343,12 @@ const fmtWhen = (d: Date | null) =>
   }
   .back-link {
     display: inline-block;
+    /* The wrapping <p> has no default margin on this page, and the panel
+       above it carries a 5px drop-shadow that eats into whatever gap is
+       left — without this the button sits flush against the shadow. Matches
+       the 1.5rem .section uses as its own top gap, for the same "space
+       between page regions" rhythm. */
+    margin-top: 1.5rem;
     text-decoration: none;
     cursor: pointer;
   }
